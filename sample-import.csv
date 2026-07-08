@@ -1,0 +1,5 @@
+sourcePlatform,sourceType,externalId,url,authorName,authorHandle,title,content,publishedAt,likeCount,commentCount,shareCount,viewCount,language,mediaTier
+x,post,csv-001,https://x.com/user1/status/csv-001,Andi Saputra,@andisaputra,,"Baru coba fitur transfer terjadwal di JakOne, ternyata mudah banget. Mantap Bank Jakarta!",2026-07-05T09:30:00Z,45,8,3,5200,id,
+instagram,comment,csv-002,https://instagram.com/p/csv-002,Lina Marlina,@linamarlina,,"Min, kartu JakCard saya gagal tap di TransJakarta padahal saldo ada. Kenapa ya?",2026-07-05T14:10:00Z,12,4,0,0,id,
+news,article,csv-003,https://ekonomikini.id/read/csv-003,Ekonomi Kini,ekonomikini.id,"Bank Jakarta Perluas Layanan QRIS ke Pasar Tradisional","Bank Jakarta menargetkan 300 pasar tradisional terlayani QRIS hingga akhir tahun, mendukung digitalisasi UMKM Jakarta.",2026-07-04T08:00:00Z,0,5,12,3400,id,tier2
+tiktok,comment,csv-004,https://tiktok.com/@user/video/csv-004,Rara Puspita,@rarapuspita,,"kecewa banget update terbaru malah bikin aplikasi sering keluar sendiri 😭",2026-07-06T01:20:00Z,89,15,0,0,id,

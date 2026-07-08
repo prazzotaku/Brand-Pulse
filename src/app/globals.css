@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — tema "Whatsapp" (tweakcn), OKLCH.
+   Variabel menyimpan komponen OKLCH mentah (tanpa wrapper) agar opacity
+   modifier (bg-primary/90 dsb.) bekerja lewat oklch(var(--x) / <alpha-value>)
+   di tailwind.config.ts. */
+@layer base {
+  :root {
+    --background: 0.9605 0.0046 258.3248;
+    --foreground: 0.2153 0.0187 235.1251;
+    --card: 1.0000 0 0;
+    --card-foreground: 0.2153 0.0187 235.1251;
+    --popover: 1.0000 0 0;
+    --popover-foreground: 0.2153 0.0187 235.1251;
+    --primary: 0.4335 0.0754 182.2315;
+    --primary-foreground: 1.0000 0 0;
+    --secondary: 0.9644 0.0208 166.1014;
+    --secondary-foreground: 0.4335 0.0754 182.2315;
+    --muted: 0.9605 0.0046 258.3248;
+    --muted-foreground: 0.5589 0.0255 233.7233;
+    --accent: 0.7610 0.2015 149.7403;
+    --accent-foreground: 1.0000 0 0;
+    --destructive: 0.6257 0.2058 29.0773;
+    --destructive-foreground: 1.0000 0 0;
+    --border: 0.9436 0.0051 228.8204;
+    --input: 0.9436 0.0051 228.8204;
+    --ring: 0.7610 0.2015 149.7403;
+    --radius: 1rem;
+
+    --chart-1: 0.7610 0.2015 149.7403;
+    --chart-2: 0.4335 0.0754 182.2315;
+    --chart-3: 0.5762 0.0995 182.3964;
+    --chart-4: 0.7356 0.1370 232.8053;
+    --chart-5: 0.6509 0.1283 170.4258;
+
+    --sidebar: 1.0000 0 0;
+    --sidebar-foreground: 0.2153 0.0187 235.1251;
+    --sidebar-primary: 0.4335 0.0754 182.2315;
+    --sidebar-primary-foreground: 1.0000 0 0;
+    --sidebar-accent: 0.9644 0.0208 166.1014;
+    --sidebar-accent-foreground: 0.4335 0.0754 182.2315;
+    --sidebar-border: 0.9436 0.0051 228.8204;
+    --sidebar-ring: 0.7610 0.2015 149.7403;
+  }
+
+  .dark {
+    --background: 0.1854 0.0182 238.2143;
+    --foreground: 0.9436 0.0051 228.8204;
+    --card: 0.2848 0.0230 235.6578;
+    --card-foreground: 0.9436 0.0051 228.8204;
+    --popover: 0.2848 0.0230 235.6578;
+    --popover-foreground: 0.9436 0.0051 228.8204;
+    --primary: 0.6509 0.1283 170.4258;
+    --primary-foreground: 0.2153 0.0187 235.1251;
+    --secondary: 0.2933 0.0423 172.8195;
+    --secondary-foreground: 0.6509 0.1283 170.4258;
+    --muted: 0.2456 0.0195 239.1061;
+    --muted-foreground: 0.6637 0.0236 235.1968;
+    --accent: 0.7610 0.2015 149.7403;
+    --accent-foreground: 0.2153 0.0187 235.1251;
+    --destructive: 0.6257 0.2058 29.0773;
+    --destructive-foreground: 0.9436 0.0051 228.8204;
+    --border: 0.3351 0.0253 234.8586;
+    --input: 0.3351 0.0253 234.8586;
+    --ring: 0.6509 0.1283 170.4258;
+
+    --chart-1: 0.7610 0.2015 149.7403;
+    --chart-2: 0.6509 0.1283 170.4258;
+    --chart-3: 0.5762 0.0995 182.3964;
+    --chart-4: 0.7356 0.1370 232.8053;
+    --chart-5: 0.4335 0.0754 182.2315;
+
+    --sidebar: 0.2153 0.0187 235.1251;
+    --sidebar-foreground: 0.9436 0.0051 228.8204;
+    --sidebar-primary: 0.6509 0.1283 170.4258;
+    --sidebar-primary-foreground: 0.2153 0.0187 235.1251;
+    --sidebar-accent: 0.2933 0.0423 172.8195;
+    --sidebar-accent-foreground: 0.6509 0.1283 170.4258;
+    --sidebar-border: 0.3351 0.0253 234.8586;
+    --sidebar-ring: 0.6509 0.1283 170.4258;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print / Save-as-PDF: tampilkan hanya isi laporan. */
+@media print {
+  aside, header, [data-print-hide] { display: none !important; }
+  main { padding: 0 !important; }
+  body { background: white !important; }
+  .print\:border-0 { border: 0 !important; }
+  .print\:p-0 { padding: 0 !important; }
+  .print\:max-w-none { max-width: none !important; }
+  section { break-inside: avoid; }
+}

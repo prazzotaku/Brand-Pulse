@@ -1,0 +1,485 @@
+// Brand Pulse OS - Prisma Schema
+//
+// Dev lokal memakai SQLite agar zero-setup. Schema ini ditulis portable:
+// untuk produksi (Supabase/PostgreSQL) cukup ganti provider menjadi
+// "postgresql" dan isi DATABASE_URL, lalu jalankan `prisma db push`.
+// Field ber-tipe union (sentiment, platform, dll) disimpan sebagai String
+// dan divalidasi lewat union types di src/lib/types.ts agar kompatibel
+// di kedua database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String
+  role       String      @default("admin") // admin | analyst | viewer
+  createdAt  DateTime    @default(now())
+  workspaces Workspace[]
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  brands    Brand[]
+}
+
+model Brand {
+  id               String          @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id])
+  name             String
+  aliases          String          @default("[]") // JSON string[]
+  competitors      String          @default("[]") // JSON string[]
+  products         String          @default("[]") // JSON string[]
+  brandVoice       String          @default("")
+  prohibitedClaims String          @default("[]") // JSON string[]
+  targetAudience   String          @default("")
+  createdAt        DateTime        @default(now())
+  keywords         BrandKeyword[]
+  sources          Source[]
+  searchProfiles   SearchProfile[]
+  mentions         Mention[]
+  alerts           Alert[]
+  savedFilters     SavedFilter[]
+  contentIdeas     ContentIdea[]
+  contentReviews   ContentReview[]
+  reports          Report[]
+  refreshJobs      RefreshJob[]
+  sourceAccounts   SourceAccount[]
+  slangTerms       SlangTerm[]
+  sociographs      SociographSnapshot[]
+  crawlRuns        CrawlRun[]
+}
+
+model BrandKeyword {
+  id        String   @id @default(cuid())
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id])
+  keyword   String
+  type      String   @default("include") // include | exclude | issue | product | campaign
+  createdAt DateTime @default(now())
+
+  @@index([brandId, type])
+}
+
+model Source {
+  id         String    @id @default(cuid())
+  brandId    String
+  brand      Brand     @relation(fields: [brandId], references: [id])
+  platform   String // facebook | instagram | x | threads | tiktok | news | rss | manual
+  name       String
+  method     String // official_api | rss | manual_import | mock
+  status     String    @default("mock") // connected | mock | limited | pending | quota_exceeded | error
+  config     String    @default("{}") // JSON: endpoint, feed URL, scope, dsb.
+  notes      String    @default("")
+  lastSyncAt DateTime?
+  createdAt  DateTime  @default(now())
+  mentions   Mention[]
+
+  @@index([brandId, platform])
+}
+
+model SearchProfile {
+  id              String   @id @default(cuid())
+  brandId         String
+  brand           Brand    @relation(fields: [brandId], references: [id])
+  name            String
+  query           String
+  booleanQuery    String   @default("")
+  filters         String   @default("{}") // JSON snapshot filter
+  refreshInterval String   @default("manual") // manual | 5m | 30m | 1h
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+model Mention {
+  id              String           @id @default(cuid())
+  brandId         String
+  brand           Brand            @relation(fields: [brandId], references: [id])
+  sourceId        String?
+  source          Source?          @relation(fields: [sourceId], references: [id])
+  sourcePlatform  String // facebook | instagram | x | threads | tiktok | news | rss | manual
+  sourceType      String // post | comment | article | video | caption | reply
+  externalId      String
+  url             String           @default("")
+  authorName      String           @default("")
+  authorHandle    String           @default("")
+  title           String           @default("")
+  content         String
+  publishedAt     DateTime
+  engagementCount Int              @default(0)
+  likeCount       Int              @default(0)
+  commentCount    Int              @default(0)
+  shareCount      Int              @default(0)
+  viewCount       Int              @default(0)
+  language        String           @default("id")
+  mediaTier       String           @default("") // tier1 | tier2 | local | blog | aggregator (khusus news)
+  rawPayload      String           @default("{}") // JSON payload asli dari connector
+  // Asal data: mock | rss | api | import — pembeda data simulasi vs data nyata
+  origin          String           @default("mock")
+  // --- Deduplication ---
+  contentHash          String    @default("") // hash(platform+author+konten ternormalisasi+tanggal)
+  isDuplicate          Boolean   @default(false)
+  duplicateOfMentionId String?
+  seenCount            Int       @default(1) // berapa kali data yang sama terlihat saat refresh
+  firstSeenAt          DateTime  @default(now())
+  lastSeenAt           DateTime  @default(now())
+  createdAt       DateTime         @default(now())
+  analysis        MentionAnalysis?
+  geoMentions     GeoMention[]
+  slangMentions   SlangMention[]
+
+  @@unique([sourcePlatform, externalId])
+  @@index([brandId, publishedAt])
+  @@index([brandId, sourcePlatform, publishedAt])
+  @@index([brandId, contentHash])
+}
+
+model MentionAnalysis {
+  id                 String   @id @default(cuid())
+  mentionId          String   @unique
+  mention            Mention  @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  isRelevant         Boolean  @default(true)
+  relevanceScore     Int      @default(0) // 0-100
+  sentiment          String   @default("neutral") // positive | negative | neutral | mixed
+  sentimentScore     Int      @default(0) // -100..100
+  confidenceScore    Int      @default(0) // 0-100
+  tone               String   @default("")
+  reputationalImpact String   @default("low") // low | medium | high | critical
+  riskScore          Int      @default(0) // 0-100
+  issueCategory      String   @default("")
+  emotion            String   @default("")
+  intent             String   @default("") // praise | complaint | question | objection | desire | fear | ...
+  summary            String   @default("")
+  reasoning          String   @default("")
+  suggestedAction    String   @default("")
+  // --- AI upgrade: geo, slang, keyword graph ---
+  detectedLocations  String   @default("[]") // JSON [{name,type,confidence,source}]
+  detectedSlang      String   @default("[]") // JSON [{term,meaningSuggestion,confidence}]
+  relatedKeywords    String   @default("[]") // JSON string[]
+  relatedHashtags    String   @default("[]") // JSON string[]
+  relatedCompetitors String   @default("[]") // JSON string[]
+  contentOpportunity String   @default("")
+  analyzedAt         DateTime @default(now())
+
+  @@index([sentiment])
+  @@index([riskScore])
+  @@index([issueCategory])
+}
+
+// ==================== Upgrade: Geo, Slang, Sociograph, Engagement ====================
+
+model GeoMention {
+  id         String   @id @default(cuid())
+  mentionId  String
+  mention    Mention  @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  name       String // Jakarta, Jawa Barat, Indonesia, ...
+  type       String // country | province | city | district
+  confidence Int      @default(50) // 0-100
+  source     String   @default("inference") // explicit | profile | text | media_domain | inference
+  createdAt  DateTime @default(now())
+
+  @@index([name])
+  @@index([mentionId])
+}
+
+model LocationEntity {
+  id         String @id @default(cuid())
+  name       String
+  type       String // country | province | city | district
+  parentName String @default("")
+  aliases    String @default("[]") // JSON string[]
+
+  @@unique([name, type])
+}
+
+model SlangTerm {
+  id                    String         @id @default(cuid())
+  brandId               String
+  brand                 Brand          @relation(fields: [brandId], references: [id])
+  slangTerm             String
+  normalizedMeaning     String         @default("")
+  frequency             Int            @default(1)
+  sentimentDistribution String         @default("{}") // JSON {positive,negative,neutral,mixed}
+  platformDistribution  String         @default("{}") // JSON {x: n, tiktok: n, ...}
+  confidenceScore       Int            @default(50)
+  status                String         @default("suggested") // suggested | approved | rejected
+  firstSeenAt           DateTime       @default(now())
+  lastSeenAt            DateTime       @default(now())
+  mentions              SlangMention[]
+
+  @@unique([brandId, slangTerm])
+}
+
+model SlangMention {
+  id          String    @id @default(cuid())
+  slangTermId String
+  slangTerm   SlangTerm @relation(fields: [slangTermId], references: [id], onDelete: Cascade)
+  mentionId   String
+  mention     Mention   @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([slangTermId, mentionId])
+}
+
+model SociographSnapshot {
+  id          String      @id @default(cuid())
+  brandId     String
+  brand       Brand       @relation(fields: [brandId], references: [id])
+  periodStart DateTime
+  periodEnd   DateTime
+  filters     String      @default("{}")
+  createdAt   DateTime    @default(now())
+  nodes       GraphNode[]
+  edges       GraphEdge[]
+}
+
+model GraphNode {
+  id             String             @id @default(cuid())
+  snapshotId     String
+  snapshot       SociographSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  type           String // keyword | hashtag | brand | competitor | slang | location | issue | platform
+  label          String
+  weight         Int                @default(1)
+  sentimentScore Int                @default(0) // -100..100 dominan
+  meta           String             @default("{}")
+}
+
+model GraphEdge {
+  id                String             @id @default(cuid())
+  snapshotId        String
+  snapshot          SociographSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  sourceLabel       String
+  targetLabel       String
+  coOccurrenceCount Int                @default(1)
+  strength          Float              @default(0)
+  sentimentWeight   Float              @default(0)
+  meta              String             @default("{}")
+}
+
+model SourceAccount {
+  id          String          @id @default(cuid())
+  brandId     String
+  brand       Brand           @relation(fields: [brandId], references: [id])
+  platform    String // facebook | instagram | x | threads | tiktok | youtube
+  handle      String
+  displayName String          @default("")
+  accountType String          @default("own") // own | competitor
+  url         String          @default("")
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  metrics     AccountMetric[]
+  contents    ContentMetric[]
+
+  @@unique([brandId, platform, handle])
+}
+
+model AccountMetric {
+  id                        String        @id @default(cuid())
+  sourceAccountId           String
+  account                   SourceAccount @relation(fields: [sourceAccountId], references: [id], onDelete: Cascade)
+  date                      DateTime      @default(now())
+  followerCount             Int           @default(0)
+  subscriberCount           Int           @default(0)
+  postCount                 Int           @default(0)
+  totalLikes                Int           @default(0)
+  totalComments             Int           @default(0)
+  totalShares               Int           @default(0)
+  totalViews                Int           @default(0)
+  totalSaves                Int           @default(0)
+  engagementRateByFollowers Float         @default(0)
+  engagementRateByViews     Float         @default(0)
+  averageEngagementPerPost  Float         @default(0)
+  averageViewsPerPost       Float         @default(0)
+  rawMetrics                String        @default("{}")
+
+  @@index([sourceAccountId, date])
+}
+
+model ContentMetric {
+  id              String        @id @default(cuid())
+  sourceAccountId String
+  account         SourceAccount @relation(fields: [sourceAccountId], references: [id], onDelete: Cascade)
+  platform        String
+  contentType     String        @default("post") // post | video | reel | short | article
+  externalId      String
+  publishedAt     DateTime      @default(now())
+  title           String        @default("")
+  caption         String        @default("")
+  url             String        @default("")
+  likeCount       Int           @default(0)
+  commentCount    Int           @default(0)
+  shareCount      Int           @default(0)
+  viewCount       Int           @default(0)
+  saveCount       Int           @default(0)
+  engagementRate  Float         @default(0)
+  sentimentScore  Int           @default(0)
+  topCommentIssues String       @default("[]")
+  rawMetrics      String        @default("{}")
+
+  @@unique([platform, externalId])
+}
+
+model CrawlRun {
+  id           String    @id @default(cuid())
+  brandId      String
+  brand        Brand     @relation(fields: [brandId], references: [id])
+  refreshJobId String    @default("")
+  connector    String // platform connector yang dijalankan
+  status       String    @default("running") // success | error | rate_limited | pending_auth | skipped
+  fetched      Int       @default(0)
+  inserted     Int       @default(0)
+  updated      Int       @default(0)
+  duplicates   Int       @default(0)
+  error        String    @default("")
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([brandId, startedAt])
+}
+
+model ConnectorCredential {
+  id            String   @id @default(cuid())
+  brandId       String   @default("")
+  platform      String
+  requiredKeys  String   @default("[]") // JSON env key names
+  isConfigured  Boolean  @default(false)
+  lastCheckedAt DateTime @default(now())
+
+  @@unique([brandId, platform])
+}
+
+model RateLimitLog {
+  id        String    @id @default(cuid())
+  platform  String
+  endpoint  String    @default("")
+  remaining Int       @default(0)
+  resetAt   DateTime?
+  note      String    @default("")
+  loggedAt  DateTime  @default(now())
+}
+
+model Alert {
+  id                String   @id @default(cuid())
+  brandId           String
+  brand             Brand    @relation(fields: [brandId], references: [id])
+  type              String // negative_spike | media_risk | crisis_keyword | competitor_spike | campaign_drop | low_confidence
+  severity          String   @default("medium") // low | medium | high | critical
+  title             String
+  description       String   @default("")
+  status            String   @default("open") // open | acknowledged | resolved
+  relatedMentionIds String   @default("[]") // JSON string[]
+  createdAt         DateTime @default(now())
+
+  @@index([brandId, status])
+}
+
+model SavedFilter {
+  id          String   @id @default(cuid())
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id])
+  name        String
+  description String   @default("")
+  query       String   @default("") // querystring filter, mis. "platform=news&minRelevance=70"
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model ContentIdea {
+  id            String   @id @default(cuid())
+  brandId       String
+  brand         Brand    @relation(fields: [brandId], references: [id])
+  idea          String
+  sourceInsight String   @default("")
+  audiencePain  String   @default("")
+  hookSuggestion String  @default("")
+  angle         String   @default("")
+  format        String   @default("") // reels | tiktok | carousel | thread | article | linkedin
+  cta           String   @default("")
+  priorityScore Int      @default(0) // 0-100
+  whyNow        String   @default("")
+  status        String   @default("new") // new | saved | used | archived
+  createdAt     DateTime @default(now())
+}
+
+model ContentReview {
+  id                  String   @id @default(cuid())
+  brandId             String
+  brand               Brand    @relation(fields: [brandId], references: [id])
+  inputHook           String
+  inputCaption        String   @default("")
+  platform            String   @default("")
+  contentSummary      String   @default("")
+  totalScore          Float    @default(0) // 0-10
+  scoreBreakdown      String   @default("{}") // JSON per rubrik
+  detectedHookType    String   @default("")
+  mainWeakness        String   @default("")
+  whyItMatters        String   @default("")
+  recommendedHookType String   @default("")
+  rewrittenOptions    String   @default("[]") // JSON string[]
+  suggestedCaption    String   @default("")
+  finalRecommendation String   @default("")
+  createdAt           DateTime @default(now())
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id])
+  type        String   @default("daily") // daily | weekly | monthly | campaign | crisis | competitor
+  title       String
+  periodStart DateTime
+  periodEnd   DateTime
+  summary     String   @default("")
+  data        String   @default("{}") // JSON agregasi angka
+  createdAt   DateTime @default(now())
+}
+
+model RefreshJob {
+  id            String    @id @default(cuid())
+  brandId       String
+  brand         Brand     @relation(fields: [brandId], references: [id])
+  trigger       String    @default("manual") // manual | scheduled
+  interval      String    @default("") // 5m | 30m | 1h (jika scheduled)
+  status            String    @default("queued") // queued | running | success | failed
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  newMentions       Int       @default(0)
+  updatedMentions   Int       @default(0) // engagement/lastSeen di-update, bukan mention baru
+  duplicatesSkipped Int       @default(0)
+  failedSources     Int       @default(0)
+  analyzedCount     Int       @default(0)
+  error             String    @default("")
+  createdAt     DateTime  @default(now())
+
+  @@index([brandId, createdAt])
+}
+
+// Log token AI — satu baris per panggilan LLM sungguhan (Gemini/DeepSeek/
+// Anthropic). Provider mock tidak mencatat di sini (tidak pakai token nyata).
+// Dipakai halaman Token Meter untuk memantau pemakaian & mendeteksi lonjakan.
+model AiUsageLog {
+  id               String   @id @default(cuid())
+  provider         String // gemini | deepseek | anthropic
+  model            String   @default("")
+  operation        String // analyzeMention | generateContentIdeas | reviewHook | generateHooks | summarizeReport
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  success          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@index([createdAt])
+}
