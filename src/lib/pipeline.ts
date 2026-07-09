@@ -116,7 +116,7 @@ export async function ingestMentions(
   brandCtx: BrandContext,
   sourceId?: string
 ): Promise<IngestResult> {
-  const ai = getAI();
+  const ai = getAI("intelligence");
   const result: IngestResult = { inserted: 0, updated: 0, duplicates: 0, analyzed: 0 };
   const now = new Date();
 
@@ -223,7 +223,7 @@ export async function ingestMentions(
 
 /** Analisis ulang mention yang belum punya analysis (mis. hasil import mentah). */
 export async function analyzePending(brandId: string, brandCtx: BrandContext): Promise<number> {
-  const ai = getAI();
+  const ai = getAI("intelligence");
   const pending = await prisma.mention.findMany({
     where: { brandId, analysis: null },
     take: 100,

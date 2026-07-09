@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   const brand = await getActiveBrand();
-  const result = await getAI().generateHooks(
+  const result = await getAI("content").generateHooks(
     {
       topic,
       platform: body.platform ?? "",

@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     shares: engagementAgg._sum.shareCount ?? 0,
   };
 
-  const summary = await getAI().summarizeReport(
+  const summary = await getAI("content").summarizeReport(
     {
       brandHealthScore: stats.brandHealthScore,
       totalMentions: stats.totalMentions,

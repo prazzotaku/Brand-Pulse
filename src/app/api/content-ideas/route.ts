@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     take: 50,
   });
 
-  const ideas = await getAI().generateContentIdeas(
+  const ideas = await getAI("content").generateContentIdeas(
     analyses.map((a) => ({
       content: a.mention.content,
       sentiment: a.sentiment,

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const brand = await getActiveBrand();
-  const result = await getAI().reviewHook(
+  const result = await getAI("content").reviewHook(
     {
       hook,
       caption: caption || hook,
