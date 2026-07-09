@@ -3,6 +3,10 @@ import { getAI } from "@/lib/ai";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
 import { rateLimit } from "@/lib/rate-limit";
 
+// Panggilan AI live bisa lebih lambat dari default 10s Vercel.
+// 60s adalah maksimum yang diizinkan Hobby plan.
+export const maxDuration = 60;
+
 const MAX_TOPIC_LEN = 500;
 
 /** POST /api/hook-generate — AI membuatkan hook & caption dari topik konten. */

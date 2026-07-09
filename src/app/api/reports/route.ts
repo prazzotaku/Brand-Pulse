@@ -8,6 +8,10 @@ import { getContentBreakdown } from "@/lib/content-breakdown";
 import { normalizeIntent } from "@/lib/constants";
 import { rateLimit } from "@/lib/rate-limit";
 
+// Menggabungkan banyak query + ringkasan AI dalam satu request bisa melebihi
+// default 10s Vercel. 60s adalah maksimum yang diizinkan Hobby plan.
+export const maxDuration = 60;
+
 const RANGE_MS: Record<string, number> = {
   daily: 24 * 60 * 60 * 1000,
   weekly: 7 * 24 * 60 * 60 * 1000,

@@ -3,6 +3,10 @@ import { getActiveBrand, toBrandContext } from "@/lib/brand";
 import { analyzePending } from "@/lib/pipeline";
 import { rateLimit } from "@/lib/rate-limit";
 
+// Analisis AI batch bisa lebih lambat dari default 10s Vercel.
+// 60s adalah maksimum yang diizinkan Hobby plan.
+export const maxDuration = 60;
+
 /** POST /api/analyze — analisis ulang mention yang belum punya hasil AI. */
 export async function POST(req: NextRequest) {
   const limited = rateLimit(req, { scope: "analyze", limit: 5, windowMs: 10 * 60 * 1000 });

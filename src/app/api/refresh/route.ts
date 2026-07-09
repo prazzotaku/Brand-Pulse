@@ -6,6 +6,10 @@ import { detectNegativeSpike, ingestMentions } from "@/lib/pipeline";
 import type { RawMention } from "@/lib/types";
 import type { FetchParams, SourceConnector } from "@/lib/connectors/types";
 
+// Fan-out ke banyak connector live + AI analysis bisa lebih lambat dari
+// default 10s Vercel. 60s adalah maksimum yang diizinkan Hobby plan.
+export const maxDuration = 60;
+
 /** Retry dengan exponential backoff (2 percobaan ulang: 300ms, 1200ms). */
 async function fetchWithRetry(connector: SourceConnector, params: FetchParams): Promise<RawMention[]> {
   const delays = [300, 1200];

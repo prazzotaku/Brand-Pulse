@@ -4,6 +4,10 @@ import { getAI } from "@/lib/ai";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
 import { rateLimit } from "@/lib/rate-limit";
 
+// Analisis insight + panggilan AI bisa lebih lambat dari default 10s Vercel.
+// 60s adalah maksimum yang diizinkan Hobby plan.
+export const maxDuration = 60;
+
 /** POST /api/content-ideas — generate ide konten dari insight mention terbaru. */
 export async function POST(req: NextRequest) {
   const limited = rateLimit(req, { scope: "content-ideas", limit: 15, windowMs: 10 * 60 * 1000 });
