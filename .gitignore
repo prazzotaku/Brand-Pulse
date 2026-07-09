@@ -3,8 +3,12 @@ node_modules/
 out/
 build/
 .env
+.env.*
+!.env.example
 *.db
 *.db-journal
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+testsprite_tests/tmp/

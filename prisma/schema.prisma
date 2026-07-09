@@ -1,19 +1,19 @@
 // Brand Pulse OS - Prisma Schema
 //
-// Dev lokal memakai SQLite agar zero-setup. Schema ini ditulis portable:
-// untuk produksi (Supabase/PostgreSQL) cukup ganti provider menjadi
-// "postgresql" dan isi DATABASE_URL, lalu jalankan `prisma db push`.
+// Provider: PostgreSQL (Supabase). DATABASE_URL = pooled connection
+// (port 6543, pgbouncer) untuk runtime; DIRECT_URL = direct connection
+// (port 5432) untuk `prisma db push`/migrate.
 // Field ber-tipe union (sentiment, platform, dll) disimpan sebagai String
-// dan divalidasi lewat union types di src/lib/types.ts agar kompatibel
-// di kedua database.
+// dan divalidasi lewat union types di src/lib/types.ts.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

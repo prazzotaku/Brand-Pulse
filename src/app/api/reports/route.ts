@@ -6,6 +6,7 @@ import { getOverviewStats } from "@/lib/stats";
 import { resolvePeriod } from "@/lib/period";
 import { getContentBreakdown } from "@/lib/content-breakdown";
 import { normalizeIntent } from "@/lib/constants";
+import { rateLimit } from "@/lib/rate-limit";
 
 const RANGE_MS: Record<string, number> = {
   daily: 24 * 60 * 60 * 1000,
@@ -19,6 +20,9 @@ const RANGE_MS: Record<string, number> = {
  * (sentimen, platform, isu, geografis, mention berisiko tinggi).
  */
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, { scope: "reports", limit: 5, windowMs: 10 * 60 * 1000 });
+  if (limited) return limited;
+
   const body = await req.json().catch(() => ({}));
   const type = ["daily", "weekly", "monthly"].includes(body.type) ? body.type : "weekly";
   const rangeMs = RANGE_MS[type];

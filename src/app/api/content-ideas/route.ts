@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAI } from "@/lib/ai";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
+import { rateLimit } from "@/lib/rate-limit";
 
 /** POST /api/content-ideas — generate ide konten dari insight mention terbaru. */
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, { scope: "content-ideas", limit: 15, windowMs: 10 * 60 * 1000 });
+  if (limited) return limited;
+
   const body = await req.json().catch(() => ({}));
   const count = Math.min(Number(body.count) || 4, 8);
 

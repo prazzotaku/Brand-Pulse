@@ -1,0 +1,1254 @@
+[
+  {
+    "id": "TC001",
+    "title": "Review the overview dashboard and switch the time period",
+    "description": "This test verifies that a user can view the overview dashboard’s brand health metrics and refresh them by switching the period filter.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Change the period filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the brand health score, sentiment donut, tone trend, and top issues are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the displayed data refreshes for the selected period"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "View brand health and refresh by period",
+    "description": "This verifies that the dashboard shows the core brand health metrics and updates them when the period filter changes.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard shows brand health and sentiment overview data"
+      },
+      {
+        "type": "action",
+        "description": "Change the period filter to a different range"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard metrics refresh for the selected period"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Browse all mentions with the default view",
+    "description": "This verifies that the mentions page loads a populated table with the total mention count visible to the user.",
+    "category": "All Mentions with filters and detail",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a populated mentions table is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the total mention count is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Import a valid mention file and verify counts refresh",
+    "description": "This test verifies that a user can import a CSV or JSON mention file in Sources and see inserted versus skipped counts along with refreshed mention totals.",
+    "category": "Sources & Connectors",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose a valid CSV or JSON file to import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify inserted and skipped counts are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mention total refreshes after the import"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Open mention details with analysis and source context",
+    "description": "This verifies that a user can open a mention and inspect its AI analysis, raw payload, and source link from the detail page.",
+    "category": "All Mentions with filters and detail",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "action",
+        "description": "Open a mention from the table"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mention detail page shows AI analysis"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the raw source payload and source link are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Import a CSV file of mentions",
+    "description": "This verifies that uploading a CSV mention file completes successfully and reports inserted versus skipped rows.",
+    "category": "Import CSV/JSON in Sources",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose a CSV file for import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a success status message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify inserted and skipped counts are reported"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Filter mentions and view the updated results",
+    "description": "This verifies that applying mention filters updates the table and the visible query state to match the selected criteria.",
+    "category": "All Mentions with filters and detail",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "action",
+        "description": "Apply a platform filter"
+      },
+      {
+        "type": "action",
+        "description": "Apply a sentiment filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mentions table updates to the filtered results"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the active filter state is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Browse mentions and open a mention detail",
+    "description": "This test verifies that a user can filter or browse mentions, open a specific mention, and see AI analysis plus raw source context.",
+    "category": "All Mentions",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "action",
+        "description": "Apply a filter or saved view"
+      },
+      {
+        "type": "action",
+        "description": "Open a mention from the table"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mention detail view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify AI analysis and raw source context are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "See new imported mentions reflected across the app",
+    "description": "This verifies that after importing mention data, the sources page refreshes and the new mention data is visible in browsing views.",
+    "category": "Import CSV/JSON in Sources",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose a CSV file for import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "action",
+        "description": "Return to the sources page view after import completes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mention total has increased"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the imported data is available in mention browsing views"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Inspect top issues from the dashboard",
+    "description": "This verifies that users can open the top issues view from the dashboard and see issue-focused data for investigation.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Open the top issues view for a prominent issue"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify issue-focused mention data is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify related trend data is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Drill into the top issue from the dashboard",
+    "description": "This test verifies that a user can start on the Overview Dashboard and open a related issue or mention path for deeper investigation.",
+    "category": "Overview Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Open a top issue from the dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Open a related mention from the issue context"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the related mention detail view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the issue context is visible in the drill-down flow"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Generate a daily report and see it added to the list",
+    "description": "This verifies that a user can generate a daily brand report from the reports list and see the new report appear with summary metrics.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the daily report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a new report appears in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify report summary metrics are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Generate content ideas from brand insights",
+    "description": "This verifies that the content ideas page shows generated ideas derived from mention data.",
+    "category": "Content Idea Engine",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated content ideas are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify each idea includes a rationale or priority context"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Generate and review new content ideas",
+    "description": "This test verifies that a user can generate new content ideas from the Content Idea Engine and see refreshed cards with the expected idea details.",
+    "category": "Content Idea Engine",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the active ideas count and idea cards are displayed"
+      },
+      {
+        "type": "action",
+        "description": "Click the action to generate new ideas"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify new idea cards are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the idea cards include priority, insight, audience pain, hook, angle, CTA, and why-now rationale"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Generate a monthly report and export it as PDF",
+    "description": "This verifies that a user can generate a monthly brand report, open it, and start the PDF export flow from the report detail view.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the monthly report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "action",
+        "description": "Open the generated report detail view"
+      },
+      {
+        "type": "action",
+        "description": "Export the report as PDF"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report export action is available on the detail page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report detail remains visible after export is initiated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Use a saved mention view",
+    "description": "This verifies that selecting a saved view applies its preset filters and shows the corresponding mentions list.",
+    "category": "All Mentions with filters and detail",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "action",
+        "description": "Select a saved view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the preset filter state is applied"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mentions table updates to the saved view results"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Change an idea status to save use or archive",
+    "description": "This verifies that a user can update an idea status and see the changed state reflected in the list.",
+    "category": "Content Idea Engine",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "action",
+        "description": "Change an idea status to saved"
+      },
+      {
+        "type": "action",
+        "description": "Change an idea status to used"
+      },
+      {
+        "type": "action",
+        "description": "Change an idea status to archived"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the idea status is updated in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated status remains visible after the change"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Generate a weekly report and open its detail view",
+    "description": "This verifies that a newly generated weekly report can be opened from the list and its detail page is shown.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the weekly report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "action",
+        "description": "Open the generated report detail view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report detail page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify report insights are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Import a JSON file of mentions",
+    "description": "This verifies that uploading a JSON mention file completes successfully and reports inserted versus skipped rows.",
+    "category": "Import CSV/JSON in Sources",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose a JSON file for import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a success status message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify inserted and skipped counts are reported"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC020",
+    "title": "Follow a mention source link",
+    "description": "This test verifies that a user can open a mention detail and follow the original source link from the mention context.",
+    "category": "All Mentions",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /mentions"
+      },
+      {
+        "type": "action",
+        "description": "Open a mention from the table"
+      },
+      {
+        "type": "action",
+        "description": "Click the source link"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the source destination is opened or indicated by the browser"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the mention context remains accessible from the detail view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC021",
+    "title": "Generate content from a topic",
+    "description": "This test verifies that a user can submit a topic in Generate Content and receive generated hooks, body copy, caption text, and a CTA.",
+    "category": "Generate Content: hook and caption generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the topic field with a relevant campaign topic"
+      },
+      {
+        "type": "action",
+        "description": "Select a platform"
+      },
+      {
+        "type": "action",
+        "description": "Select a content format"
+      },
+      {
+        "type": "action",
+        "description": "Select a goal"
+      },
+      {
+        "type": "action",
+        "description": "Submit the content generator form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated hook options, content sections, caption text, and a CTA are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC022",
+    "title": "Generate a hook and caption pair",
+    "description": "This verifies that a user can generate content suggestions and see the resulting hook and caption content.",
+    "category": "Generate Content",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Generate content suggestions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated hook content is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify generated caption content is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC023",
+    "title": "Open a report and export it as PDF",
+    "description": "This verifies that a generated report can be opened and exported from its detail page.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Open a report from the list"
+      },
+      {
+        "type": "action",
+        "description": "Export the report as PDF"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report detail view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the export action is available from the report detail view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC024",
+    "title": "Browse the reports list and generate a report",
+    "description": "This test verifies that a user can create a daily, weekly, or monthly report from the Reports page and see it added to the list.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Choose a report period"
+      },
+      {
+        "type": "action",
+        "description": "Generate the report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the reports list shows the newly created report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report is available with its expected period"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC025",
+    "title": "Generate reports of multiple frequencies from the same page",
+    "description": "This verifies that the user can create different report frequencies from the reports page and see each report added as expected.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the daily report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "action",
+        "description": "Select the monthly report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify multiple generated reports are visible in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the newest report appears first"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC026",
+    "title": "Generate a report from an empty reports list",
+    "description": "This verifies that the reports page correctly handles an empty starting state and still allows report creation.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is visible"
+      },
+      {
+        "type": "action",
+        "description": "Select the daily report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a new report appears in the list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC027",
+    "title": "Review generated content with rubric feedback",
+    "description": "This verifies that the hook and caption reviewer accepts a review and adds it to review history.",
+    "category": "Generate Content",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Open the review area for generated content"
+      },
+      {
+        "type": "action",
+        "description": "Enter a review comment"
+      },
+      {
+        "type": "action",
+        "description": "Submit the review"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the review is added to history"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the review feedback is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC028",
+    "title": "Change an idea status and see it update",
+    "description": "This test verifies that a user can change a content idea’s status and see the card reflect the updated status badge.",
+    "category": "Content Idea Engine",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "action",
+        "description": "Click the save status action on an idea card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the idea card shows the saved status"
+      },
+      {
+        "type": "action",
+        "description": "Click the used status action on the same idea card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the idea card shows the used status"
+      },
+      {
+        "type": "action",
+        "description": "Click the archive status action on the same idea card"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the idea card shows the archived status"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC029",
+    "title": "Create a daily report",
+    "description": "This verifies that a user can generate a daily report and see it listed in reports.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Generate a daily report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new report appears in the reports list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report type is daily"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC030",
+    "title": "Create a weekly report",
+    "description": "This verifies that a user can generate a weekly report and see it listed in reports.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Generate a weekly report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new report appears in the reports list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report type is weekly"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC031",
+    "title": "Review a caption and see rubric scoring history",
+    "description": "This test verifies that a user can submit a hook or caption for review and see rubric scoring plus a new history entry.",
+    "category": "Generate Content: hook and caption review",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the review section"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the review text field with a caption or hook"
+      },
+      {
+        "type": "action",
+        "description": "Select a platform for review"
+      },
+      {
+        "type": "action",
+        "description": "Submit the review form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a scored rubric breakdown and overall score are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the review history shows a new entry at the top"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC032",
+    "title": "Browse existing reports without generating a new one",
+    "description": "This verifies that a user can review the current reports list and open an existing report detail page.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify report cards or an empty state are visible"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing report detail view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report detail page is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC033",
+    "title": "Create a monthly report",
+    "description": "This verifies that a user can generate a monthly report and see it listed in reports.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Generate a monthly report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new report appears in the reports list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report type is monthly"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC034",
+    "title": "Skip duplicate mention rows during import",
+    "description": "This test verifies that duplicate rows in an imported mention file are skipped and only unique rows are inserted.",
+    "category": "Sources & Connectors",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose a CSV or JSON file with duplicate mention rows to import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify duplicate rows are reported as skipped"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify only unique rows are counted as inserted"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC035",
+    "title": "Open report detail from the newest generated report",
+    "description": "This verifies that the most recently generated report can be opened and viewed from the reports list.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the daily report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "action",
+        "description": "Open the newest report detail view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the report detail page is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC036",
+    "title": "Copy generated content and see confirmation",
+    "description": "This test verifies that a user can copy a generated result in Generate Content and see the copied confirmation state.",
+    "category": "Generate Content: hook and caption generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the topic field with a relevant campaign topic"
+      },
+      {
+        "type": "action",
+        "description": "Submit the content generator form"
+      },
+      {
+        "type": "action",
+        "description": "Click the copy action for a generated result"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a copied confirmation state is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC037",
+    "title": "Copy generated content to the clipboard state",
+    "description": "This verifies that copying generated content shows a confirmation state to the user.",
+    "category": "Generate Content",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /generate-content"
+      },
+      {
+        "type": "action",
+        "description": "Generate content suggestions"
+      },
+      {
+        "type": "action",
+        "description": "Copy generated content"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a copy confirmation state is visible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC038",
+    "title": "See report generation loading feedback",
+    "description": "This verifies that the user receives visible loading feedback while a report is being generated.",
+    "category": "Reports generation",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "action",
+        "description": "Select the weekly report type"
+      },
+      {
+        "type": "action",
+        "description": "Click the report generation action"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a loading state is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the generated report appears afterward"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC039",
+    "title": "Prevent invalid source imports",
+    "description": "This verifies that unsupported or invalid import files are rejected with a visible validation error before data is added.",
+    "category": "Import CSV/JSON in Sources",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /sources"
+      },
+      {
+        "type": "action",
+        "description": "Choose an unsupported or invalid file for import"
+      },
+      {
+        "type": "action",
+        "description": "Submit the import"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a file validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no import success message is shown"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC040",
+    "title": "View secondary intelligence pages from the app navigation",
+    "description": "This test verifies that a user can open the secondary intelligence views and each page loads its own content area.",
+    "category": "Secondary intelligence views",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /alerts"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the alerts view is displayed"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /trend-radar"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the trend radar view is displayed"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /sociograph"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the sociograph view is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC041",
+    "title": "Handle an empty content ideas state",
+    "description": "This verifies that the content ideas page shows an empty state when no ideas are available to review.",
+    "category": "Content Idea Engine",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no generated ideas are displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC042",
+    "title": "Handle empty states for key creation views",
+    "description": "This test verifies that empty-state messaging is shown when there are no reports or ideas available to review.",
+    "category": "Validation and edge cases",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is displayed when no reports are available"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /content-ideas"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is displayed when no ideas are available"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC043",
+    "title": "See an empty reports state",
+    "description": "This verifies that the reports page shows an empty state when no reports have been generated yet.",
+    "category": "Reports",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /reports"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no reports are listed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC044",
+    "title": "Open the in-app guide and settings pages",
+    "description": "This test verifies that a user can navigate to the guide and settings views and see their page content.",
+    "category": "Settings and in-app guide",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /guide"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the in-app guide content is displayed"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the settings page content is displayed"
+      }
+    ],
+    "priority": "Low"
+  }
+]

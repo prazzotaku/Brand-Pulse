@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAI } from "@/lib/ai";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
+import { rateLimit } from "@/lib/rate-limit";
+
+const MAX_CAPTION_LEN = 4000;
 
 /**
  * POST /api/hook-review — user menempel caption LENGKAP; AI mendeteksi hook
@@ -9,6 +12,9 @@ import { getActiveBrand, toBrandContext } from "@/lib/brand";
  * demi kompatibilitas, `hook` terpisah.
  */
 export async function POST(req: NextRequest) {
+  const limited = rateLimit(req, { scope: "hook-review", limit: 15, windowMs: 10 * 60 * 1000 });
+  if (limited) return limited;
+
   const body = await req.json().catch(() => ({}));
   const caption = String(body.caption ?? "").trim();
   // Hook = baris non-kosong pertama dari caption (fallback ke field hook lama).
@@ -17,6 +23,12 @@ export async function POST(req: NextRequest) {
 
   if (!caption && !hook) {
     return NextResponse.json({ ok: false, error: "Field 'caption' wajib diisi." }, { status: 400 });
+  }
+  if (caption.length > MAX_CAPTION_LEN) {
+    return NextResponse.json(
+      { ok: false, error: `Caption terlalu panjang (maks ${MAX_CAPTION_LEN} karakter).` },
+      { status: 400 }
+    );
   }
 
   const brand = await getActiveBrand();
