@@ -2,6 +2,20 @@ import { prisma } from "./prisma";
 import { getAI } from "./ai";
 import { mentionContentHash } from "./hash";
 import type { AIAnalysisResult, BrandContext, RawMention } from "./types";
+import type { MentionForAnalysis } from "./ai/provider";
+
+/**
+ * Cek apakah mention mengandung keyword kompetitor.
+ * @returns Nama kompetitor pertama yang ditemukan, atau null.
+ */
+function findCompetitorInMention(
+  mention: Pick<MentionForAnalysis, "title" | "content">,
+  brandCtx: BrandContext
+): string | null {
+  if (!brandCtx.competitors.length) return null;
+  const text = `${mention.title} ${mention.content}`.toLowerCase();
+  return brandCtx.competitors.find((c) => text.includes(c.toLowerCase())) ?? null;
+}
 
 /** Petakan hasil AI → kolom MentionAnalysis (array/objek disimpan sebagai JSON string). */
 export function analysisToDb(result: AIAnalysisResult) {
@@ -197,19 +211,46 @@ export async function ingestMentions(
     });
     result.inserted++;
 
-    const analysis = await ai.analyzeMention(
-      {
-        sourcePlatform: raw.sourcePlatform,
-        sourceType: raw.sourceType,
-        title: raw.title,
-        content: raw.content,
-        authorName: raw.authorName,
-        authorHandle: raw.authorHandle,
-        engagementCount: raw.engagementCount,
-        mediaTier: raw.mediaTier || undefined,
-      },
-      brandCtx
-    );
+    let analysis: AIAnalysisResult;
+    const competitor = findCompetitorInMention(raw, brandCtx);
+
+    if (competitor) {
+      analysis = {
+        isRelevant: false,
+        relevanceScore: 0,
+        sentiment: "neutral",
+        sentimentScore: 0,
+        confidenceScore: 95,
+        reputationalImpact: "low",
+        riskScore: 0,
+        issueCategory: "irrelevant",
+        emotion: "netral",
+        intent: "information",
+        summary: `Mention tentang kompetitor ${competitor}, bukan tentang brand.`,
+        reasoning: "Prefilter: terdeteksi keyword kompetitor.",
+        suggestedAction: "Tidak perlu aksi; lanjutkan monitoring.",
+        relatedCompetitors: [competitor],
+        detectedLocations: [],
+        detectedSlang: [],
+        relatedKeywords: [],
+        relatedHashtags: [],
+        contentOpportunity: `Bahan gap analysis vs ${competitor}.`,
+      };
+    } else {
+      analysis = await ai.analyzeMention(
+        {
+          sourcePlatform: raw.sourcePlatform,
+          sourceType: raw.sourceType,
+          title: raw.title,
+          content: raw.content,
+          authorName: raw.authorName,
+          authorHandle: raw.authorHandle,
+          engagementCount: raw.engagementCount,
+          mediaTier: raw.mediaTier || undefined,
+        },
+        brandCtx
+      );
+    }
 
     await prisma.mentionAnalysis.create({
       data: { mentionId: mention.id, ...analysisToDb(analysis) },
@@ -229,19 +270,46 @@ export async function analyzePending(brandId: string, brandCtx: BrandContext): P
     take: 100,
   });
   for (const m of pending) {
-    const result = await ai.analyzeMention(
-      {
-        sourcePlatform: m.sourcePlatform,
-        sourceType: m.sourceType,
-        title: m.title,
-        content: m.content,
-        authorName: m.authorName,
-        authorHandle: m.authorHandle,
-        engagementCount: m.engagementCount,
-        mediaTier: m.mediaTier || undefined,
-      },
-      brandCtx
-    );
+    let result: AIAnalysisResult;
+    const competitor = findCompetitorInMention(m, brandCtx);
+
+    if (competitor) {
+      result = {
+        isRelevant: false,
+        relevanceScore: 0,
+        sentiment: "neutral",
+        sentimentScore: 0,
+        confidenceScore: 95,
+        reputationalImpact: "low",
+        riskScore: 0,
+        issueCategory: "irrelevant",
+        emotion: "netral",
+        intent: "information",
+        summary: `Mention tentang kompetitor ${competitor}, bukan tentang brand.`,
+        reasoning: "Prefilter: terdeteksi keyword kompetitor.",
+        suggestedAction: "Tidak perlu aksi; lanjutkan monitoring.",
+        relatedCompetitors: [competitor],
+        detectedLocations: [],
+        detectedSlang: [],
+        relatedKeywords: [],
+        relatedHashtags: [],
+        contentOpportunity: `Bahan gap analysis vs ${competitor}.`,
+      };
+    } else {
+      result = await ai.analyzeMention(
+        {
+          sourcePlatform: m.sourcePlatform,
+          sourceType: m.sourceType,
+          title: m.title,
+          content: m.content,
+          authorName: m.authorName,
+          authorHandle: m.authorHandle,
+          engagementCount: m.engagementCount,
+          mediaTier: m.mediaTier || undefined,
+        },
+        brandCtx
+      );
+    }
     await prisma.mentionAnalysis.create({ data: { mentionId: m.id, ...analysisToDb(result) } });
     await persistAnalysisExtras(brandId, m.id, m.sourcePlatform, result);
   }
