@@ -1,0 +1,12 @@
+{
+  "projectId": "a1b31947-4505-4346-b5a1-642c9b88e4fc",
+  "type": "frontend",
+  "name": "Competitor mentions are marked irrelevant, not AI-analyzed",
+  "priority": "p0",
+  "planSteps": [
+    { "type": "action", "description": "Navigate to the brand settings and add 'Nike' as a competitor" },
+    { "type": "action", "description": "Go to the manual import page and import a CSV mention file containing the keyword 'Nike'" },
+    { "type": "action", "description": "Wait for ingest and analysis to complete" },
+    { "type": "assertion", "description": "Navigate to the mentions page and verify the new 'Nike' mention appears in the feed but is marked as 'irrelevant' with a reason of 'Competitor mention', and its sentiment is neutral, and its risk score is 0." }
+  ]
+}
