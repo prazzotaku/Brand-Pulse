@@ -52,15 +52,20 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
   protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
     const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify/instagram-scraper";
     const target = params.query.trim();
+    console.log(`[ApifyInstagramConnector] target="${target}" actorId="${actorId}"`);
     if (!target) return [];
 
     // --- Tahap 1: Ambil post dari profil ---
+    const directUrl = target.startsWith("https://") ? target : `https://www.instagram.com/${target}/`;
+    console.log(`[ApifyInstagramConnector] Tahap 1: fetching posts dari ${directUrl}`);
     const postItems = await apifyRun(actorId, {
-      directUrls: [target.startsWith("https://") ? target : `https://www.instagram.com/${target}/`],
+      directUrls: [directUrl],
       resultsType: "posts",
       resultsLimit: params.limit ?? 15,
     });
+    console.log(`[ApifyInstagramConnector] Tahap 1: dapat ${postItems.length} item mentah`);
     const posts = postItems.map((it) => this.normalizePost(it, actorId)).filter((p): p is RawMention => p !== null);
+    console.log(`[ApifyInstagramConnector] Tahap 1: berhasil normalize ${posts.length} post`);
 
     // --- Tahap 2: Ambil komentar dari post-post yang didapat ---
     const postUrls = postItems.map((p) => String(p.url)).filter(Boolean);
@@ -69,12 +74,17 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
     let comments: RawMention[] = [];
     try {
       const commentsLimit = Number(process.env.APIFY_INSTAGRAM_COMMENTS_LIMIT) || 10;
+      console.log(
+        `[ApifyInstagramConnector] Tahap 2: fetching comments untuk ${postUrls.length} post, limit=${commentsLimit}`
+      );
       const commentItems = await apifyRun(actorId, {
         directUrls: postUrls,
         resultsType: "comments",
         resultsLimit: commentsLimit,
       });
+      console.log(`[ApifyInstagramConnector] Tahap 2: dapat ${commentItems.length} komentar mentah`);
       comments = commentItems.map((it) => this.normalizeComment(it, actorId)).filter((c): c is RawMention => c !== null);
+      console.log(`[ApifyInstagramConnector] Tahap 2: berhasil normalize ${comments.length} komentar`);
     } catch (err) {
       console.error("ApifyInstagramConnector: Gagal mengambil komentar, melanjutkan dengan post saja.", err);
     }

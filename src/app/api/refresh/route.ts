@@ -98,6 +98,9 @@ export async function POST(req: NextRequest) {
           connector.meta.platform === "instagram" && brand.instagramHandle.trim()
             ? brand.instagramHandle.trim()
             : brand.name;
+        console.log(
+          `[REFRESH] platform=${connector.meta.platform} instagramHandle="${brand.instagramHandle}" query="${query}"`
+        );
         const raws = await fetchWithRetry(connector, {
           query,
           since: source?.lastSyncAt ?? undefined,
@@ -129,6 +132,7 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         const classified = connector.handleError(err);
+        console.error(`[REFRESH] connector=${connector.meta.platform} gagal:`, err);
         failedSources++;
         failures.push(`${connector.meta.platform}: ${classified.detail ?? String(err)}`);
         await prisma.crawlRun.update({
