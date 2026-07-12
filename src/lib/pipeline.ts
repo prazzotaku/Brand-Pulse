@@ -8,13 +8,56 @@ import type { MentionForAnalysis } from "./ai/provider";
  * Cek apakah mention mengandung keyword kompetitor.
  * @returns Nama kompetitor pertama yang ditemukan, atau null.
  */
+function mentionText(mention: Pick<MentionForAnalysis, "title" | "content">): string {
+  return `${mention.title} ${mention.content}`.toLowerCase();
+}
+
+function hasExplicitBrandMention(
+  mention: Pick<MentionForAnalysis, "title" | "content">,
+  brandCtx: BrandContext
+): boolean {
+  const text = mentionText(mention);
+  const brandTerms = [brandCtx.name, ...brandCtx.aliases]
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  return brandTerms.some((term) => text.includes(term));
+}
+
 function findCompetitorInMention(
   mention: Pick<MentionForAnalysis, "title" | "content">,
   brandCtx: BrandContext
 ): string | null {
   if (!brandCtx.competitors.length) return null;
-  const text = `${mention.title} ${mention.content}`.toLowerCase();
+  const text = mentionText(mention);
   return brandCtx.competitors.find((c) => text.includes(c.toLowerCase())) ?? null;
+}
+
+function buildIrrelevantAnalysis(competitor: string | null): AIAnalysisResult {
+  return {
+    isRelevant: false,
+    relevanceScore: 0,
+    sentiment: "neutral",
+    sentimentScore: 0,
+    confidenceScore: 95,
+    reputationalImpact: "low",
+    riskScore: 0,
+    issueCategory: "irrelevant",
+    emotion: "netral",
+    intent: "information",
+    summary: competitor
+      ? `Mention tentang kompetitor ${competitor}, bukan tentang brand.`
+      : "Mention tidak menyebut brand secara eksplisit, jadi dianggap tidak relevan.",
+    reasoning: competitor
+      ? "Prefilter: terdeteksi keyword kompetitor tanpa penyebutan brand."
+      : "Prefilter: brand/alias tidak disebut secara eksplisit di judul atau konten.",
+    suggestedAction: "Tidak perlu aksi; lanjutkan monitoring.",
+    relatedCompetitors: competitor ? [competitor] : [],
+    detectedLocations: [],
+    detectedSlang: [],
+    relatedKeywords: [],
+    relatedHashtags: [],
+    contentOpportunity: competitor ? `Bahan gap analysis vs ${competitor}.` : "",
+  };
 }
 
 /** Petakan hasil AI → kolom MentionAnalysis (array/objek disimpan sebagai JSON string). */
@@ -212,30 +255,11 @@ export async function ingestMentions(
     result.inserted++;
 
     let analysis: AIAnalysisResult;
-    const competitor = findCompetitorInMention(raw, brandCtx);
+    const explicitBrandHit = hasExplicitBrandMention(raw, brandCtx);
 
-    if (competitor) {
-      analysis = {
-        isRelevant: false,
-        relevanceScore: 0,
-        sentiment: "neutral",
-        sentimentScore: 0,
-        confidenceScore: 95,
-        reputationalImpact: "low",
-        riskScore: 0,
-        issueCategory: "irrelevant",
-        emotion: "netral",
-        intent: "information",
-        summary: `Mention tentang kompetitor ${competitor}, bukan tentang brand.`,
-        reasoning: "Prefilter: terdeteksi keyword kompetitor.",
-        suggestedAction: "Tidak perlu aksi; lanjutkan monitoring.",
-        relatedCompetitors: [competitor],
-        detectedLocations: [],
-        detectedSlang: [],
-        relatedKeywords: [],
-        relatedHashtags: [],
-        contentOpportunity: `Bahan gap analysis vs ${competitor}.`,
-      };
+    if (!explicitBrandHit) {
+      const competitor = findCompetitorInMention(raw, brandCtx);
+      analysis = buildIrrelevantAnalysis(competitor);
     } else {
       analysis = await ai.analyzeMention(
         {
@@ -271,30 +295,11 @@ export async function analyzePending(brandId: string, brandCtx: BrandContext): P
   });
   for (const m of pending) {
     let result: AIAnalysisResult;
-    const competitor = findCompetitorInMention(m, brandCtx);
+    const explicitBrandHit = hasExplicitBrandMention(m, brandCtx);
 
-    if (competitor) {
-      result = {
-        isRelevant: false,
-        relevanceScore: 0,
-        sentiment: "neutral",
-        sentimentScore: 0,
-        confidenceScore: 95,
-        reputationalImpact: "low",
-        riskScore: 0,
-        issueCategory: "irrelevant",
-        emotion: "netral",
-        intent: "information",
-        summary: `Mention tentang kompetitor ${competitor}, bukan tentang brand.`,
-        reasoning: "Prefilter: terdeteksi keyword kompetitor.",
-        suggestedAction: "Tidak perlu aksi; lanjutkan monitoring.",
-        relatedCompetitors: [competitor],
-        detectedLocations: [],
-        detectedSlang: [],
-        relatedKeywords: [],
-        relatedHashtags: [],
-        contentOpportunity: `Bahan gap analysis vs ${competitor}.`,
-      };
+    if (!explicitBrandHit) {
+      const competitor = findCompetitorInMention(m, brandCtx);
+      result = buildIrrelevantAnalysis(competitor);
     } else {
       result = await ai.analyzeMention(
         {
