@@ -50,7 +50,9 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
   }
 
   protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
-    const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify/instagram-scraper";
+    // Format actorId untuk API Apify pakai tilde (~), bukan slash (/):
+    // "apify/instagram-scraper" (nama di Store) -> "apify~instagram-scraper" (actorId API).
+    const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify~instagram-scraper";
     const target = params.query.trim();
     console.log(`[ApifyInstagramConnector] target="${target}" actorId="${actorId}"`);
     if (!target) return [];
