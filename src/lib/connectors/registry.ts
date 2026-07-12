@@ -14,6 +14,7 @@ import {
   YouTubeConnector,
 } from "./extra-connectors";
 import { EnsembleInstagramConnector, EnsembleTikTokConnector } from "./ensemble-connectors";
+import { ApifyInstagramConnector } from "./apify-connector";
 import { NewsDataConnector } from "./newsdata-connector";
 import { getMockConnectors } from "./mock-connector";
 
@@ -67,13 +68,21 @@ export function getConnectors(): SourceConnector[] {
   if (isMockMode()) {
     return [...getMockConnectors(), new ManualImportConnector()];
   }
-  // Live mode: Instagram & TikTok via Ensembledata bila ENSEMBLEDATA_TOKEN ada,
-  // selain itu fallback ke connector API resmi (Meta/TikTok Research).
-  // Berita: NewsData.io (bila key ada) + Google News RSS untuk cakupan lebih luas.
+  // Live mode: Instagram punya 3 tingkat provider — Apify (bila APIFY_TOKEN ada)
+  // diprioritaskan di atas Ensembledata (bila ENSEMBLEDATA_TOKEN ada), lalu
+  // fallback ke connector API resmi (Meta). TikTok tetap Ensembledata atau
+  // fallback API resmi (TikTok Research). Berita: NewsData.io (bila key ada)
+  // + Google News RSS untuk cakupan lebih luas.
+  const hasApify = Boolean(process.env.APIFY_TOKEN);
   const hasEnsemble = Boolean(process.env.ENSEMBLEDATA_TOKEN);
+  const instagramConnector = hasApify
+    ? new ApifyInstagramConnector()
+    : hasEnsemble
+      ? new EnsembleInstagramConnector()
+      : new InstagramGraphConnector();
   const connectors: SourceConnector[] = [
     new FacebookGraphConnector(),
-    hasEnsemble ? new EnsembleInstagramConnector() : new InstagramGraphConnector(),
+    instagramConnector,
     new XApiConnector(),
     new ThreadsApiConnector(),
     hasEnsemble ? new EnsembleTikTokConnector() : new TikTokResearchConnector(),
