@@ -1,23 +1,14 @@
 import type { RawMention } from "../types";
 import { type ConnectorMeta, type FetchParams } from "./types";
 import { EnvGatedConnector } from "./social-api-connectors";
+import { createHash } from "crypto";
 
-/**
- * Connector Apify (https://apify.com) — LIVE, data pihak ketiga.
- * Aktif ketika APIFY_TOKEN diisi di .env. Bayar per panggilan, jadi tiap
- * fetch dibatasi jumlahnya. Dipakai sebagai alternatif provider scraping
- * untuk berbagai platform. Compliance: memakai layanan data berbayar pihak ketiga;
- * status kepatuhan mengikuti ToS Apify (keputusan bisnis pengguna).
- */
+function hashString(input: string): string {
+  return createHash("sha256").update(input).digest("hex").slice(0, 16);
+}
 
 const API_BASE = "https://api.apify.com/v2";
 
-/**
- * Panggil Apify Actor secara sinkron dan langsung dapatkan dataset item-nya.
- * @param actorId - ID atau nama Actor (mis. "apify/instagram-hashtag-scraper").
- * @param input - Objek input untuk Actor.
- * @returns Array dari item dataset.
- */
 async function apifyRun(actorId: string, input: Record<string, unknown>): Promise<any[]> {
   const token = process.env.APIFY_TOKEN ?? "";
   if (!token) throw new Error("APIFY_TOKEN is not set.");
@@ -44,17 +35,13 @@ async function apifyRun(actorId: string, input: Record<string, unknown>): Promis
   return res.json();
 }
 
-function toHashtag(query: string): string {
-  return query.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-/** Instagram via Apify hashtag posts. */
+/** Instagram via Apify profile/post scraper. */
 export class ApifyInstagramConnector extends EnvGatedConnector {
   readonly meta: ConnectorMeta = {
     platform: "instagram",
     label: "Instagram (Apify - live)",
     method: "public_api",
-    scopeNotes: "Live via Apify (berbayar per call). Isi APIFY_TOKEN di .env. Mengambil post publik dari hashtag.",
+    scopeNotes: "Scrape post + caption dari 1 akun Instagram (via handle di Settings), plus komentar tiap post.",
     requiredEnvKeys: ["APIFY_TOKEN"],
   };
 
@@ -63,30 +50,45 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
   }
 
   protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
-    // Gunakan placeholder Actor ID; ini perlu disesuaikan dengan Actor yang sebenarnya
-    // Anda pilih di Apify Store untuk scraping hashtag Instagram.
-    const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify/instagram-hashtag-scraper";
+    const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify/instagram-scraper";
+    const target = params.query.trim();
+    if (!target) return [];
 
-    const input = {
-      hashtags: [toHashtag(params.query)],
+    // --- Tahap 1: Ambil post dari profil ---
+    const postItems = await apifyRun(actorId, {
+      directUrls: [target.startsWith("https://") ? target : `https://www.instagram.com/${target}/`],
+      resultsType: "posts",
       resultsLimit: params.limit ?? 15,
-    };
+    });
+    const posts = postItems.map((it) => this.normalizePost(it, actorId)).filter((p): p is RawMention => p !== null);
 
-    const items = await apifyRun(actorId, input);
+    // --- Tahap 2: Ambil komentar dari post-post yang didapat ---
+    const postUrls = postItems.map((p) => String(p.url)).filter(Boolean);
+    if (postUrls.length === 0) return posts;
 
-    return items
-      .map((it) => this.normalizePayload(it))
-      .filter((m): m is RawMention => m !== null);
+    let comments: RawMention[] = [];
+    try {
+      const commentsLimit = Number(process.env.APIFY_INSTAGRAM_COMMENTS_LIMIT) || 10;
+      const commentItems = await apifyRun(actorId, {
+        directUrls: postUrls,
+        resultsType: "comments",
+        resultsLimit: commentsLimit,
+      });
+      comments = commentItems.map((it) => this.normalizeComment(it, actorId)).filter((c): c is RawMention => c !== null);
+    } catch (err) {
+      console.error("ApifyInstagramConnector: Gagal mengambil komentar, melanjutkan dengan post saja.", err);
+    }
+
+    return [...posts, ...comments];
   }
 
-  normalizePayload(raw: Record<string, unknown>): RawMention | null {
+  private normalizePost(raw: Record<string, unknown>, actorId: string): RawMention | null {
     if (!raw.id && !raw.shortCode) return null;
-
     const id = String(raw.id ?? raw.shortCode);
     const shortCode = String(raw.shortCode ?? raw.id);
     const likes = Number(raw.likesCount ?? 0);
     const comments = Number(raw.commentsCount ?? 0);
-    const author = (raw.owner as Record<string, string>) ?? {};
+    const author = (raw.owner as Record<string, string>) ?? (raw as Record<string, string>) ?? {};
 
     return {
       origin: "api",
@@ -102,11 +104,53 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
       engagementCount: likes + comments,
       likeCount: likes,
       commentCount: comments,
-      shareCount: 0, // Apify Actor untuk hashtag umumnya tidak menyediakan share count
+      shareCount: 0,
       viewCount: Number(raw.videoViewCount ?? 0),
       language: "id",
       mediaTier: "",
-      rawPayload: { source: "apify", id, shortcode: shortCode },
+      rawPayload: {
+        source: "apify",
+        actorId,
+        id,
+        shortcode: shortCode,
+        commentsPreview: (raw.latestComments as any[])?.map((c: any) => ({
+          text: c.text,
+          owner: c.ownerUsername,
+          likes: c.likesCount,
+        })),
+      },
+    };
+  }
+
+  private normalizeComment(raw: Record<string, unknown>, actorId: string): RawMention | null {
+    const text = String(raw.text ?? "");
+    if (!text) return null;
+
+    const postUrl = String(raw.postUrl ?? raw.url ?? "");
+    // ID komentar Apify tidak selalu ada/unik, jadi buat fallback hash.
+    const id = String(raw.id ?? hashString([postUrl, text, String(raw.ownerUsername ?? "")].join("|")));
+    const likes = Number(raw.likesCount ?? 0);
+    const author = (raw.owner as Record<string, string>) ?? (raw as Record<string, string>) ?? {};
+
+    return {
+      origin: "api",
+      sourcePlatform: "instagram",
+      sourceType: "comment",
+      externalId: `ig-comment-${id}`,
+      url: postUrl,
+      authorName: author.fullName ?? author.username ?? "",
+      authorHandle: author.username ? `@${author.username}` : "",
+      title: "",
+      content: text,
+      publishedAt: raw.timestamp ? new Date(String(raw.timestamp)) : new Date(),
+      engagementCount: likes,
+      likeCount: likes,
+      commentCount: 0,
+      shareCount: 0,
+      viewCount: 0,
+      language: "id",
+      mediaTier: "",
+      rawPayload: { source: "apify", actorId, id: raw.id, owner: raw.ownerUsername, text },
     };
   }
 }

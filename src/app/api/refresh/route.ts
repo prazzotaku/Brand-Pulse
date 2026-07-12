@@ -93,8 +93,13 @@ export async function POST(req: NextRequest) {
         }
 
         // Incremental fetching: hanya data sejak sinkronisasi terakhir.
+        // Untuk Instagram via Apify, prioritaskan handle akun dari Settings.
+        const query =
+          connector.meta.platform === "instagram" && brand.instagramHandle.trim()
+            ? brand.instagramHandle.trim()
+            : brand.name;
         const raws = await fetchWithRetry(connector, {
-          query: brand.name,
+          query,
           since: source?.lastSyncAt ?? undefined,
           limit: 15,
         });

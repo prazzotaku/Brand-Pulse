@@ -45,6 +45,7 @@ model Brand {
   brandVoice       String          @default("")
   prohibitedClaims String          @default("[]") // JSON string[]
   targetAudience   String          @default("")
+  instagramHandle  String          @default("") // username atau URL profil IG, target scraping Apify
   createdAt        DateTime        @default(now())
   keywords         BrandKeyword[]
   sources          Source[]

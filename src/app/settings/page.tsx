@@ -40,6 +40,7 @@ export default async function SettingsPage({
         brandVoice: String(formData.get("brandVoice") ?? ""),
         prohibitedClaims: JSON.stringify(splitList(formData.get("prohibitedClaims"))),
         targetAudience: String(formData.get("targetAudience") ?? ""),
+        instagramHandle: String(formData.get("instagramHandle") ?? "").trim(),
       },
     });
 
@@ -136,6 +137,19 @@ export default async function SettingsPage({
             <div className="space-y-1.5">
               <Label htmlFor="targetAudience">Target audience</Label>
               <Textarea id="targetAudience" name="targetAudience" defaultValue={brand.targetAudience} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="instagramHandle">Instagram handle (scraping Apify)</Label>
+              <Input
+                id="instagramHandle"
+                name="instagramHandle"
+                defaultValue={brand.instagramHandle}
+                placeholder="bankjakarta atau https://www.instagram.com/bankjakarta"
+              />
+              <p className="text-xs text-muted-foreground">
+                Target akun untuk connector Instagram (Apify) — semua post &amp; komentar akun ini akan
+                di-scrape saat refresh. Kosongkan untuk nonaktifkan.
+              </p>
             </div>
             <Button type="submit">Simpan perubahan</Button>
           </form>
