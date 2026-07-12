@@ -9,7 +9,6 @@ import {
 } from "./social-api-connectors";
 import {
   BlogRssConnector,
-  ForumRedditConnector,
   ManualImportConnector,
   YouTubeConnector,
 } from "./extra-connectors";
@@ -24,8 +23,9 @@ import { getMockConnectors } from "./mock-connector";
  * MODE dikendalikan env MOCK_CONNECTORS:
  *  - "true"  → semua platform pakai MockConnector (data simulasi, badge MOCK).
  *              Cocok untuk demo/dev tanpa API key. INI DEFAULT saat ini.
- *  - "false" → connector live: Google News RSS + Reddit (aktif tanpa key),
- *              sisanya API resmi yang aktif saat kredensial diisi di .env.
+ *  - "false" → connector live: Google News RSS (aktif tanpa key), sisanya API
+ *              resmi yang aktif saat kredensial diisi di .env. Reddit
+ *              dinonaktifkan sementara (error), lihat getConnectors().
  */
 export function isMockMode(): boolean {
   return (process.env.MOCK_CONNECTORS ?? "true").toLowerCase() !== "false";
@@ -92,7 +92,7 @@ export function getConnectors(): SourceConnector[] {
   connectors.push(
     new GoogleNewsRssConnector(),
     new BlogRssConnector(),
-    new ForumRedditConnector(),
+    // new ForumRedditConnector(), // Dinonaktifkan sementara karena error
     new ManualImportConnector()
   );
   return connectors;
