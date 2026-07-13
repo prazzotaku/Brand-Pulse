@@ -98,10 +98,17 @@ model SearchProfile {
   name            String
   query           String
   booleanQuery    String   @default("")
+  // Target platform pencarian publik: facebook | instagram | x | threads | tiktok | ...
+  platform        String   @default("")
+  // Mode pencarian: public_keyword (frasa/keyword bebas) | public_hashtag (hashtag spesifik)
+  scope           String   @default("public_keyword")
   filters         String   @default("{}") // JSON snapshot filter
   refreshInterval String   @default("manual") // manual | 5m | 30m | 1h
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
+  crawlRuns       CrawlRun[]
+
+  @@index([brandId, platform])
 }
 
 model Mention {
@@ -282,6 +289,7 @@ model SourceAccount {
   createdAt   DateTime        @default(now())
   metrics     AccountMetric[]
   contents    ContentMetric[]
+  crawlRuns   CrawlRun[]
 
   @@unique([brandId, platform, handle])
 }
@@ -338,6 +346,14 @@ model CrawlRun {
   brand        Brand     @relation(fields: [brandId], references: [id])
   refreshJobId String    @default("")
   connector    String // platform connector yang dijalankan
+  // Target spesifik crawl ini — salah satu dari dua relasi berikut (atau
+  // keduanya kosong untuk connector lama yang belum pakai target eksplisit).
+  sourceAccountId String?
+  sourceAccount    SourceAccount? @relation(fields: [sourceAccountId], references: [id])
+  searchProfileId  String?
+  searchProfile    SearchProfile? @relation(fields: [searchProfileId], references: [id])
+  // Mode fetch: owned_account | public_keyword | public_hashtag
+  scope        String    @default("")
   status       String    @default("running") // success | error | rate_limited | pending_auth | skipped
   fetched      Int       @default(0)
   inserted     Int       @default(0)
@@ -348,6 +364,8 @@ model CrawlRun {
   finishedAt   DateTime?
 
   @@index([brandId, startedAt])
+  @@index([sourceAccountId])
+  @@index([searchProfileId])
 }
 
 model ConnectorCredential {

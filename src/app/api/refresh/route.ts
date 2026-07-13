@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
-import { getConnectors } from "@/lib/connectors/registry";
+import { resolveConnector } from "@/lib/connectors/registry";
 import { detectNegativeSpike, ingestMentions } from "@/lib/pipeline";
 import type { RawMention } from "@/lib/types";
-import type { FetchParams, SourceConnector } from "@/lib/connectors/types";
+import type { FetchTarget, SourceConnector } from "@/lib/connectors/types";
 
 // Fan-out ke banyak connector live + AI analysis bisa lebih lambat dari
 // default 10s Vercel. 60s adalah maksimum yang diizinkan Hobby plan.
 export const maxDuration = 60;
 
 /** Retry dengan exponential backoff (2 percobaan ulang: 300ms, 1200ms). */
-async function fetchWithRetry(connector: SourceConnector, params: FetchParams): Promise<RawMention[]> {
+async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): Promise<RawMention[]> {
   const delays = [300, 1200];
   let lastError: unknown;
   for (let attempt = 0; attempt <= delays.length; attempt++) {
@@ -30,9 +30,11 @@ async function fetchWithRetry(connector: SourceConnector, params: FetchParams): 
 
 /**
  * POST /api/refresh — background crawl job penuh:
- * per connector: incremental fetch (sejak lastSyncAt) → dedup 2 lapis → simpan →
- * AI analysis (sentiment+geo+slang+keyword) → deteksi spike. Setiap connector
- * tercatat sebagai CrawlRun; error/rate limit tidak menjatuhkan job lain.
+ * 1. Bangun daftar "fetch target" dari SourceAccount (akun milik sendiri) dan
+ *    SearchProfile (pencarian publik).
+ * 2. Untuk setiap target, resolve connector yang sesuai (platform+scope).
+ * 3. Jalankan setiap fetch secara independen, catat sebagai CrawlRun per target.
+ * 4. Error/rate limit per target tidak menjatuhkan job refresh keseluruhan.
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -40,6 +42,10 @@ export async function POST(req: NextRequest) {
 
   const brand = await getActiveBrand();
   const brandCtx = toBrandContext(brand);
+  const [sourceAccounts, searchProfiles] = await Promise.all([
+    prisma.sourceAccount.findMany({ where: { brandId: brand.id, isActive: true } }),
+    prisma.searchProfile.findMany({ where: { brandId: brand.id, isActive: true } }),
+  ]);
 
   const job = await prisma.refreshJob.create({
     data: {
@@ -59,15 +65,60 @@ export async function POST(req: NextRequest) {
     let failedSources = 0;
     const failures: string[] = [];
 
-    const sources = await prisma.source.findMany({ where: { brandId: brand.id } });
+    // --- 1. Bangun daftar fetch target ---
+    const targets: FetchTarget[] = [];
+    // Target dari akun milik sendiri (SourceAccount)
+    for (const acc of sourceAccounts) {
+      targets.push({
+        scope: "owned_account",
+        platform: acc.platform,
+        handle: acc.handle,
+        query: acc.handle, // query fallback
+        targetId: acc.id,
+        limit: 15,
+      });
+    }
+    // Target dari profil pencarian publik (SearchProfile)
+    for (const p of searchProfiles) {
+      if (!p.platform) continue; // profil lama tanpa platform eksplisit — lewati
+      targets.push({
+        scope: p.scope === "public_hashtag" ? "public_hashtag" : "public_keyword",
+        platform: p.platform,
+        query: p.query,
+        targetId: p.id,
+        limit: 15,
+      });
+    }
+    // Fallback transisi: jika belum ada SourceAccount untuk Instagram, pakai
+    // instagramHandle dari Brand (perilaku lama).
+    if (!targets.some((t) => t.platform === "instagram" && t.scope === "owned_account") && brand.instagramHandle) {
+      targets.push({
+        scope: "owned_account",
+        platform: "instagram",
+        handle: brand.instagramHandle,
+        query: brand.instagramHandle,
+        limit: 15,
+      });
+    }
 
-    for (const connector of getConnectors()) {
-      const source = sources.find((s) => s.platform === connector.meta.platform);
+    console.log(`[REFRESH] Ditemukan ${targets.length} fetch target untuk brand "${brand.name}".`);
+
+    for (const target of targets) {
+      // --- 2. Resolve connector & jalankan fetch ---
+      const connector = resolveConnector(target.platform, target.scope);
+      if (!connector) {
+        console.warn(`[REFRESH] Tidak ada connector untuk platform=${target.platform}, scope=${target.scope}. Lewati.`);
+        continue;
+      }
+
       const run = await prisma.crawlRun.create({
         data: {
           brandId: brand.id,
           refreshJobId: job.id,
-          connector: connector.meta.platform,
+          connector: target.platform,
+          scope: target.scope,
+          sourceAccountId: target.scope === "owned_account" ? target.targetId : undefined,
+          searchProfileId: target.scope.startsWith("public") ? target.targetId : undefined,
           status: "running",
         },
       });
@@ -79,34 +130,11 @@ export async function POST(req: NextRequest) {
             where: { id: run.id },
             data: { status: "pending_auth", finishedAt: new Date(), error: status.detail ?? "" },
           });
-          if (source) {
-            await prisma.source.update({ where: { id: source.id }, data: { status: "pending_auth" } });
-          }
-          continue;
-        }
-        if (connector.meta.method === "manual_import") {
-          await prisma.crawlRun.update({
-            where: { id: run.id },
-            data: { status: "skipped", finishedAt: new Date() },
-          });
           continue;
         }
 
-        // Incremental fetching: hanya data sejak sinkronisasi terakhir.
-        // Untuk Instagram via Apify, prioritaskan handle akun dari Settings.
-        const query =
-          connector.meta.platform === "instagram" && brand.instagramHandle.trim()
-            ? brand.instagramHandle.trim()
-            : brand.name;
-        console.log(
-          `[REFRESH] platform=${connector.meta.platform} instagramHandle="${brand.instagramHandle}" query="${query}"`
-        );
-        const raws = await fetchWithRetry(connector, {
-          query,
-          since: source?.lastSyncAt ?? undefined,
-          limit: 15,
-        });
-        const result = await ingestMentions(brand.id, raws, brandCtx, source?.id);
+        const raws = await fetchWithRetry(connector, target);
+        const result = await ingestMentions(brand.id, raws, brandCtx);
 
         inserted += result.inserted;
         updated += result.updated;
@@ -124,28 +152,20 @@ export async function POST(req: NextRequest) {
             duplicates: result.duplicates,
           },
         });
-        if (source) {
-          await prisma.source.update({
-            where: { id: source.id },
-            data: { lastSyncAt: new Date(), status: "active" },
-          });
-        }
       } catch (err) {
         const classified = connector.handleError(err);
-        console.error(`[REFRESH] connector=${connector.meta.platform} gagal:`, err);
+        const errorDetail = classified.detail ?? String(err);
+        console.error(`[REFRESH] Target gagal: platform=${target.platform}, scope=${target.scope}, query="${target.query}". Error:`, errorDetail);
         failedSources++;
-        failures.push(`${connector.meta.platform}: ${classified.detail ?? String(err)}`);
+        failures.push(`${target.platform} (${target.scope}): ${errorDetail}`);
         await prisma.crawlRun.update({
           where: { id: run.id },
-          data: { status: classified.status, finishedAt: new Date(), error: classified.detail ?? String(err) },
+          data: { status: classified.status, finishedAt: new Date(), error: errorDetail },
         });
         if (classified.status === "rate_limited") {
           await prisma.rateLimitLog.create({
-            data: { platform: connector.meta.platform, note: classified.detail ?? "" },
+            data: { platform: target.platform, note: errorDetail },
           });
-        }
-        if (source) {
-          await prisma.source.update({ where: { id: source.id }, data: { status: classified.status } });
         }
       }
     }

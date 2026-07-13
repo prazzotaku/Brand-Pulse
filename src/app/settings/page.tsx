@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { parseJsonArray } from "@/lib/types";
+import { AddAccountForm, AddSearchProfileForm } from "@/components/accounts/account-forms";
+import { PlatformBadge } from "@/components/shared/badges";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,16 @@ export default async function SettingsPage({
   searchParams: { saved?: string };
 }) {
   const brand = await getActiveBrand();
+  const [accounts, searchProfiles] = await Promise.all([
+    prisma.sourceAccount.findMany({
+      where: { brandId: brand.id, isActive: true },
+      orderBy: [{ accountType: "asc" }, { platform: "asc" }, { handle: "asc" }],
+    }),
+    prisma.searchProfile.findMany({
+      where: { brandId: brand.id, isActive: true },
+      orderBy: [{ platform: "asc" }, { name: "asc" }],
+    }),
+  ]);
 
   async function updateBrand(formData: FormData) {
     "use server";
@@ -40,7 +52,6 @@ export default async function SettingsPage({
         brandVoice: String(formData.get("brandVoice") ?? ""),
         prohibitedClaims: JSON.stringify(splitList(formData.get("prohibitedClaims"))),
         targetAudience: String(formData.get("targetAudience") ?? ""),
-        instagramHandle: String(formData.get("instagramHandle") ?? "").trim(),
       },
     });
 
@@ -138,21 +149,82 @@ export default async function SettingsPage({
               <Label htmlFor="targetAudience">Target audience</Label>
               <Textarea id="targetAudience" name="targetAudience" defaultValue={brand.targetAudience} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="instagramHandle">Instagram handle (scraping Apify)</Label>
-              <Input
-                id="instagramHandle"
-                name="instagramHandle"
-                defaultValue={brand.instagramHandle}
-                placeholder="bankjakarta atau https://www.instagram.com/bankjakarta"
-              />
-              <p className="text-xs text-muted-foreground">
-                Target akun untuk connector Instagram (Apify) — semua post &amp; komentar akun ini akan
-                di-scrape saat refresh. Kosongkan untuk nonaktifkan.
-              </p>
-            </div>
             <Button type="submit">Simpan perubahan</Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Owned Accounts</CardTitle>
+          <CardDescription>
+            Daftarkan akun media sosial milik brand (own) atau kompetitor. Akun "own" akan dipakai untuk
+            menarik konten (post/video) dan komentar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AddAccountForm />
+          {accounts.length > 0 ? (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Akun yang sudah terdaftar
+              </p>
+              <div className="space-y-2 text-sm">
+                {accounts.map((acc) => (
+                  <div key={acc.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
+                    <div>
+                      <p className="font-medium">{acc.displayName || acc.handle}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{acc.handle}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <PlatformBadge platform={acc.platform} />
+                      <span className="rounded-full border px-2 py-0.5 text-xs">
+                        {acc.accountType === "own" ? "own" : "kompetitor"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Belum ada akun terdaftar.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Public Search Profiles</CardTitle>
+          <CardDescription>
+            Definisikan target pencarian publik (keyword/hashtag) di berbagai platform untuk menangkap
+            mention di luar akun sendiri.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AddSearchProfileForm />
+          {searchProfiles.length > 0 ? (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Profil pencarian aktif
+              </p>
+              <div className="space-y-2 text-sm">
+                {searchProfiles.map((p) => (
+                  <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
+                    <div>
+                      <p className="font-medium">{p.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{p.query}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {p.platform ? <PlatformBadge platform={p.platform} /> : null}
+                      <span className="rounded-full border px-2 py-0.5 text-xs">{p.scope || "public_keyword"}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Belum ada search profile aktif.</p>
+          )}
         </CardContent>
       </Card>
 

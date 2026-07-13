@@ -12,7 +12,7 @@ function mentionText(mention: Pick<MentionForAnalysis, "title" | "content">): st
   return `${mention.title} ${mention.content}`.toLowerCase();
 }
 
-function hasExplicitBrandMention(
+export function hasExplicitBrandMention(
   mention: Pick<MentionForAnalysis, "title" | "content">,
   brandCtx: BrandContext
 ): boolean {
@@ -23,7 +23,7 @@ function hasExplicitBrandMention(
   return brandTerms.some((term) => text.includes(term));
 }
 
-function findCompetitorInMention(
+export function findCompetitorInMention(
   mention: Pick<MentionForAnalysis, "title" | "content">,
   brandCtx: BrandContext
 ): string | null {
@@ -32,7 +32,7 @@ function findCompetitorInMention(
   return brandCtx.competitors.find((c) => text.includes(c.toLowerCase())) ?? null;
 }
 
-function buildIrrelevantAnalysis(competitor: string | null): AIAnalysisResult {
+export function buildIrrelevantAnalysis(competitor: string | null): AIAnalysisResult {
   return {
     isRelevant: false,
     relevanceScore: 0,
@@ -170,8 +170,7 @@ export interface IngestResult {
 export async function ingestMentions(
   brandId: string,
   raws: RawMention[],
-  brandCtx: BrandContext,
-  sourceId?: string
+  brandCtx: BrandContext
 ): Promise<IngestResult> {
   const ai = getAI("intelligence");
   const result: IngestResult = { inserted: 0, updated: 0, duplicates: 0, analyzed: 0 };
@@ -228,7 +227,6 @@ export async function ingestMentions(
     const mention = await prisma.mention.create({
       data: {
         brandId,
-        sourceId: sourceId ?? null,
         sourcePlatform: raw.sourcePlatform,
         sourceType: raw.sourceType,
         externalId: raw.externalId,
