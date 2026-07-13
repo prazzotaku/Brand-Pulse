@@ -14,7 +14,13 @@ import { PrismaClient } from "@prisma/client";
 import { DeepSeekProvider } from "../src/lib/ai/deepseek-provider";
 import { GeminiProvider } from "../src/lib/ai/gemini-provider";
 import type { AIProvider } from "../src/lib/ai/provider";
-import { analysisToDb, persistAnalysisExtras } from "../src/lib/pipeline";
+import {
+  analysisToDb,
+  buildIrrelevantAnalysis,
+  findCompetitorInMention,
+  hasExplicitBrandMention,
+  persistAnalysisExtras,
+} from "../src/lib/pipeline";
 import { parseJsonArray, type BrandContext } from "../src/lib/types";
 
 const prisma = new PrismaClient();
@@ -91,20 +97,28 @@ async function main() {
   let failed = 0;
   for (const m of mentions) {
     try {
-      const result = await analyzeWithRetry(
-        ai,
-        {
-          sourcePlatform: m.sourcePlatform,
-          sourceType: m.sourceType,
-          title: m.title,
-          content: m.content,
-          authorName: m.authorName,
-          authorHandle: m.authorHandle,
-          engagementCount: m.engagementCount,
-          mediaTier: m.mediaTier || undefined,
-        },
-        brandCtx
-      );
+      let result;
+      const explicitBrandHit = hasExplicitBrandMention(m, brandCtx);
+
+      if (!explicitBrandHit) {
+        const competitor = findCompetitorInMention(m, brandCtx);
+        result = buildIrrelevantAnalysis(competitor);
+      } else {
+        result = await analyzeWithRetry(
+          ai,
+          {
+            sourcePlatform: m.sourcePlatform,
+            sourceType: m.sourceType,
+            title: m.title,
+            content: m.content,
+            authorName: m.authorName,
+            authorHandle: m.authorHandle,
+            engagementCount: m.engagementCount,
+            mediaTier: m.mediaTier || undefined,
+          },
+          brandCtx
+        );
+      }
 
       await prisma.mentionAnalysis.upsert({
         where: { mentionId: m.id },
