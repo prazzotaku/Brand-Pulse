@@ -85,6 +85,74 @@ export function AddAccountForm() {
   );
 }
 
+export function AddSearchProfileForm() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/search-profiles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          platform: form.get("platform"),
+          scope: form.get("scope"),
+          query: form.get("query"),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMsg("Search profile ditambahkan.");
+      (e.target as HTMLFormElement).reset?.();
+      router.refresh();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Gagal menambah profil.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="space-y-1">
+        <Label htmlFor="sp-name">Nama Profil <span className="text-destructive">*</span></Label>
+        <Input id="sp-name" name="name" required placeholder="Contoh: TikTok mentions" className="h-9" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="sp-platform">Platform</Label>
+        <Select id="sp-platform" name="platform" className="h-9">
+          {ACCOUNT_PLATFORMS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="sp-scope">Scope</Label>
+        <Select id="sp-scope" name="scope" className="h-9">
+          <option value="public_keyword">Keyword/Frasa</option>
+          <option value="public_hashtag">Hashtag</option>
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="sp-query">Query <span className="text-destructive">*</span></Label>
+        <Input id="sp-query" name="query" required placeholder='"bank jakarta"' className="h-9" />
+      </div>
+      <div className="flex items-end gap-2">
+        <Button type="submit" size="sm" disabled={loading} className="h-9">
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Tambah Profil
+        </Button>
+      </div>
+      {msg && <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-5" aria-live="polite">{msg}</p>}
+    </form>
+  );
+}
+
 export function FetchMetricsButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

@@ -129,10 +129,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const manualSource = await prisma.source.findFirst({
+  await prisma.source.findFirst({
     where: { brandId: brand.id, platform: "manual" },
   });
-  const result = await ingestMentions(brand.id, raws, brandCtx, manualSource?.id);
+  const result = await ingestMentions(brand.id, raws, brandCtx);
 
   return NextResponse.json({ ok: true, ...result });
 }

@@ -5,11 +5,10 @@ import { ImportForm } from "@/components/sources/import-form";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { getConnectorDirectory, isMockMode } from "@/lib/connectors/registry";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-// Status hasil crawl terakhir per connector (dari CrawlRun) untuk badge live.
 const RUN_STATUS_STYLE: Record<string, string> = {
   success: "bg-emerald-50 text-emerald-700 border-emerald-200",
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -20,8 +19,13 @@ const RUN_STATUS_STYLE: Record<string, string> = {
 };
 
 const RUN_STATUS_LABEL: Record<string, string> = {
-  success: "aktif", active: "aktif", rate_limited: "kena rate limit",
-  pending_auth: "butuh API key", error: "error", skipped: "manual",
+  success: "sukses",
+  active: "aktif",
+  rate_limited: "kena rate limit",
+  pending_auth: "butuh API key",
+  error: "error",
+  skipped: "dilewati",
+  running: "berjalan",
 };
 
 export default async function SourcesPage() {
@@ -29,50 +33,127 @@ export default async function SourcesPage() {
   const directory = getConnectorDirectory();
   const mockMode = isMockMode();
 
-  // Ambil status crawl terakhir + lastSync per platform dari DB.
-  const [sources, latestRuns] = await Promise.all([
-    prisma.source.findMany({ where: { brandId: brand.id } }),
+  const [accounts, searchProfiles, latestRuns] = await Promise.all([
+    prisma.sourceAccount.findMany({ where: { brandId: brand.id } }),
+    prisma.searchProfile.findMany({ where: { brandId: brand.id } }),
     prisma.crawlRun.findMany({
       where: { brandId: brand.id },
       orderBy: { startedAt: "desc" },
-      take: 60,
+      take: 100, // Ambil lebih banyak untuk mencakup semua target
+      include: { sourceAccount: true, searchProfile: true },
     }),
   ]);
-  const lastRunByConnector = new Map<string, (typeof latestRuns)[number]>();
+
+  const lastRunByTarget = new Map<string, (typeof latestRuns)[number]>();
   for (const r of latestRuns) {
-    if (!lastRunByConnector.has(r.connector)) lastRunByConnector.set(r.connector, r);
+    const targetKey = r.sourceAccountId ?? r.searchProfileId;
+    if (targetKey && !lastRunByTarget.has(targetKey)) {
+      lastRunByTarget.set(targetKey, r);
+    }
   }
-  const lastSyncByPlatform = new Map(sources.map((s) => [s.platform, s.lastSyncAt]));
+
+  // Buat daftar target dari SourceAccount dan SearchProfile
+  const ownedTargets = accounts
+    .filter((a) => a.isActive)
+    .map((a) => ({
+      key: a.id,
+      name: a.displayName || a.handle,
+      platform: a.platform,
+      scope: "owned_account",
+      run: lastRunByTarget.get(a.id),
+    }));
+
+  const publicTargets = searchProfiles
+    .filter((p) => p.isActive)
+    .map((p) => ({
+      key: p.id,
+      name: p.name,
+      platform: p.platform,
+      scope: p.scope,
+      run: lastRunByTarget.get(p.id),
+    }));
+
+  const allTargets = [...ownedTargets, ...publicTargets].sort((a, b) =>
+    a.platform.localeCompare(b.platform) || a.name.localeCompare(b.name)
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Sources &amp; Connectors</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Data Sources</h1>
         <p className="text-sm text-muted-foreground">
           Mode aktif:{" "}
           <span className={`font-semibold ${mockMode ? "text-amber-700" : "text-emerald-700"}`}>
             {mockMode ? "MOCK (data simulasi)" : "LIVE (data nyata)"}
           </span>
           . Ubah lewat <code className="font-mono">MOCK_CONNECTORS</code> di <code className="font-mono">.env</code>.
-          Label &amp; status di bawah dibaca langsung dari registry connector.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {directory.map((c) => {
-          const run = lastRunByConnector.get(c.platform);
-          // Status tampil: hasil crawl terakhir bila ada; kalau belum, dari konfigurasi.
-          const status = run?.status ?? (c.configured ? "ready" : "pending_auth");
-          const style = RUN_STATUS_STYLE[status] ?? "bg-slate-100 text-slate-600 border-slate-200";
-          const label = RUN_STATUS_LABEL[status] ?? (c.configured ? "siap" : "butuh API key");
-          const lastSync = lastSyncByPlatform.get(c.platform);
-          return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Crawl Targets</CardTitle>
+          <CardDescription>
+            Daftar target fetch yang aktif (dari Owned Accounts dan Public Search Profiles di Settings).
+            Setiap target di-crawl secara independen saat refresh.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          {allTargets.map((t) => {
+            const status = t.run?.status ?? "pending";
+            const style = RUN_STATUS_STYLE[status] ?? "bg-slate-100 text-slate-600 border-slate-200";
+            const label = RUN_STATUS_LABEL[status] ?? "menunggu";
+            const lastSync = t.run?.finishedAt;
+            return (
+              <Card key={t.key}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-base">{t.name}</CardTitle>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${style}`}>
+                      {label}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PlatformBadge platform={t.platform} />
+                    <Badge variant="outline" className="font-mono text-xs">{t.scope}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  <p className="text-xs text-muted-foreground">
+                    Sinkronisasi terakhir: {lastSync ? formatDateTime(lastSync) : "belum pernah"}
+                    {t.run && ` · ${t.run.inserted} baru, ${t.run.duplicates} duplikat`}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+          {allTargets.length === 0 && (
+            <p className="py-4 text-center text-sm text-muted-foreground md:col-span-2">
+              Belum ada target aktif. Konfigurasikan Owned Accounts atau Public Search Profiles di halaman Settings.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connector Directory</CardTitle>
+          <CardDescription>
+            Daftar semua connector yang tersedia di aplikasi. Status menunjukkan apakah API key sudah terisi.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          {directory.map((c) => (
             <Card key={`${c.platform}-${c.label}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base">{c.label}</CardTitle>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${style}`}>
-                    {label}
+                  <span
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
+                      c.configured ? RUN_STATUS_STYLE.active : RUN_STATUS_STYLE.pending_auth
+                    }`}
+                  >
+                    {c.configured ? "siap" : "butuh API key"}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -88,15 +169,11 @@ export default async function SourcesPage() {
                     Butuh env: <span className="font-mono">{c.requiredEnvKeys.join(", ")}</span>
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Sinkronisasi terakhir: {lastSync ? formatDateTime(lastSync) : "belum pernah"}
-                  {run && ` · crawl terakhir: +${run.inserted} baru, ${run.duplicates} duplikat`}
-                </p>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -128,3 +205,4 @@ export default async function SourcesPage() {
     </div>
   );
 }
+

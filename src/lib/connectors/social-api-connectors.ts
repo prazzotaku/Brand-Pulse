@@ -3,7 +3,7 @@ import {
   BaseConnector,
   type ConnectorMeta,
   type ConnectorStatusInfo,
-  type FetchParams,
+  type FetchTarget,
 } from "./types";
 
 /**
@@ -30,7 +30,7 @@ async function getJson(url: string, init?: RequestInit): Promise<Record<string, 
 
 export abstract class EnvGatedConnector extends BaseConnector {
   protected abstract isConfigured(): boolean;
-  protected abstract fetchLive(params: FetchParams): Promise<RawMention[]>;
+  protected abstract fetchLive(params: FetchTarget): Promise<RawMention[]>;
 
   async getConnectorStatus(): Promise<ConnectorStatusInfo> {
     return this.isConfigured()
@@ -38,7 +38,7 @@ export abstract class EnvGatedConnector extends BaseConnector {
       : { status: "pending_auth", detail: `Butuh env: ${(this.meta.requiredEnvKeys ?? []).join(", ")}` };
   }
 
-  async fetchMentions(params: FetchParams): Promise<RawMention[]> {
+  async fetchMentions(params: FetchTarget): Promise<RawMention[]> {
     if (!this.isConfigured()) return []; // belum ada API key → tidak ada data (bukan mock)
     return this.fetchLive(params);
   }
@@ -58,7 +58,7 @@ export class XApiConnector extends EnvGatedConnector {
     return Boolean(process.env.X_BEARER_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const query = encodeURIComponent(`"${params.query}" -is:retweet`);
     const max = Math.min(Math.max(params.limit ?? 10, 10), 100);
     const url =
@@ -114,7 +114,7 @@ export class FacebookGraphConnector extends EnvGatedConnector {
     return Boolean(process.env.FB_PAGE_ID && process.env.FB_ACCESS_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const url =
       `https://graph.facebook.com/v19.0/${process.env.FB_PAGE_ID}/posts` +
       `?fields=message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)` +
@@ -165,7 +165,7 @@ export class InstagramGraphConnector extends EnvGatedConnector {
     return Boolean(process.env.IG_USER_ID && process.env.IG_ACCESS_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const url =
       `https://graph.facebook.com/v19.0/${process.env.IG_USER_ID}/media` +
       `?fields=caption,timestamp,permalink,like_count,comments_count,username` +
@@ -211,7 +211,7 @@ export class ThreadsApiConnector extends EnvGatedConnector {
     return Boolean(process.env.THREADS_USER_ID && process.env.THREADS_ACCESS_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const url =
       `https://graph.threads.net/v1.0/${process.env.THREADS_USER_ID}/threads` +
       `?fields=id,text,timestamp,permalink,username` +
@@ -257,7 +257,7 @@ export class TikTokResearchConnector extends EnvGatedConnector {
     return Boolean(process.env.TIKTOK_ACCESS_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const data = await getJson(
       "https://open.tiktokapis.com/v2/research/video/query/?fields=id,video_description,create_time,like_count,comment_count,share_count,view_count,username",
       {

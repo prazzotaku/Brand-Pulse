@@ -11,6 +11,22 @@ export interface FetchParams {
   cursor?: string;
 }
 
+export type FetchScope = "owned_account" | "public_keyword" | "public_hashtag";
+
+/**
+ * Parameter terstruktur untuk setiap tugas fetch.
+ * Dibangun oleh pipeline refresh dari SourceAccount / SearchProfile.
+ */
+export interface FetchTarget extends FetchParams {
+  /** Platform target fetch: facebook | instagram | x | threads | tiktok | ... */
+  platform: SourcePlatform | string;
+  scope: FetchScope;
+  // Opsional, untuk scope: 'owned_account'
+  handle?: string;
+  // Opsional, ID dari baris SourceAccount / SearchProfile
+  targetId?: string;
+}
+
 export interface AccountConfig {
   platform: SourcePlatform | string;
   handle: string;
@@ -72,7 +88,7 @@ export interface ConnectorMeta {
 export interface SourceConnector {
   readonly meta: ConnectorMeta;
   /** Ambil mention baru dari sumber (incremental via params.since/cursor). */
-  fetchMentions(params: FetchParams): Promise<RawMention[]>;
+  fetchMentions(params: FetchTarget): Promise<RawMention[]>;
   /** Ambil metrik engagement sebuah akun (null bila tidak didukung/terkonfigurasi). */
   fetchEngagement(account: AccountConfig): Promise<EngagementSnapshot | null>;
   /** Ambil komentar sebuah konten (kosong bila tidak didukung). */
@@ -94,7 +110,7 @@ export interface SourceConnector {
  */
 export abstract class BaseConnector implements SourceConnector {
   abstract readonly meta: ConnectorMeta;
-  abstract fetchMentions(params: FetchParams): Promise<RawMention[]>;
+  abstract fetchMentions(params: FetchTarget): Promise<RawMention[]>;
 
   protected lastRateLimit: RateLimitStatus = { limited: false };
 
