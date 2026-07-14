@@ -3,6 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SentimentBadge, RiskBadge, OriginBadge } from "@/components/shared/badges";
 import { PeriodFilter } from "@/components/shared/period-filter";
+import { PaginationControls } from "@/components/shared/pagination-controls";
 import { MediaFilterBar } from "@/components/media/media-filter-bar";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +12,7 @@ import { resolvePeriod, periodWhere, resolveGranularity, type PeriodSearchParams
 import { buildMentionWhere, type MentionFilters } from "@/lib/filters";
 import { getSentimentTrend } from "@/lib/trend";
 import { formatDateTime } from "@/lib/utils";
+import { PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 const MEDIA_PLATFORMS = ["news", "rss", "blog"];
 
@@ -32,11 +34,16 @@ const TIER_LABELS: Record<string, string> = {
 export default async function MediaTonePage({
   searchParams,
 }: {
-  searchParams: MentionFilters & PeriodSearchParams & { gran?: string };
+  searchParams: MentionFilters & PeriodSearchParams & { gran?: string, page?: string, pageSize?: string };
 }) {
   const brand = await getActiveBrand();
   const period = resolvePeriod(searchParams);
   const granularity = resolveGranularity(searchParams.gran, period);
+
+  const page = Math.max(1, Number(searchParams.page) || 1);
+  const pageSize = PAGE_SIZE_OPTIONS.includes(Number(searchParams.pageSize))
+    ? Number(searchParams.pageSize)
+    : DEFAULT_PAGE_SIZE;
 
   // where dari filter (sentiment/keyword/tier), lalu scope ke platform berita.
   const where = buildMentionWhere(brand.id, searchParams);
@@ -45,19 +52,20 @@ export default async function MediaTonePage({
     .split(",").map((s) => s.trim()).filter(Boolean).filter((p) => MEDIA_PLATFORMS.includes(p));
   where.sourcePlatform = { in: requested.length ? requested : MEDIA_PLATFORMS };
 
-  const [articles, trend] = await Promise.all([
+  const [articles, total, trend] = await Promise.all([
     prisma.mention.findMany({
       where,
       include: { analysis: true },
       orderBy: { publishedAt: "desc" },
-      take: 50,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     }),
+    prisma.mention.count({ where }),
     getSentimentTrend(where, period, granularity),
   ]);
 
-  const analyzed = articles.filter((m) => m.analysis);
-  const negativeImpact = analyzed.filter((m) =>
-    ["high", "critical"].includes(m.analysis!.reputationalImpact)
+  const negativeImpactOnPage = articles.filter((m) =>
+    m.analysis && ["high", "critical"].includes(m.analysis.reputationalImpact)
   ).length;
 
   return (
@@ -66,7 +74,8 @@ export default async function MediaTonePage({
         <h1 className="text-2xl font-bold tracking-tight">Media Tone</h1>
         <p className="text-sm text-muted-foreground">
           Tone pemberitaan online tentang {brand.name} — {period.label.toLowerCase()}:{" "}
-          {articles.length} artikel, {negativeImpact} berdampak reputasi tinggi/kritis.
+          {total} artikel cocok filter.
+          {negativeImpactOnPage > 0 && ` Di halaman ini, ${negativeImpactOnPage} berdampak reputasi tinggi/kritis.`}
         </p>
       </div>
 
@@ -149,6 +158,8 @@ export default async function MediaTonePage({
           </Card>
         )}
       </div>
+
+      <PaginationControls page={page} pageSize={pageSize} total={total} itemLabel="artikel" />
     </div>
   );
 }

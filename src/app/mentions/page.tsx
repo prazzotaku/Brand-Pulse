@@ -2,18 +2,26 @@ import Link from "next/link";
 import { Bookmark } from "lucide-react";
 import { FilterBar } from "@/components/mentions/filter-bar";
 import { MentionTable } from "@/components/mentions/mention-table";
+import { PaginationControls } from "@/components/shared/pagination-controls";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { buildMentionWhere, type MentionFilters } from "@/lib/filters";
+import { PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 export default async function MentionsPage({
   searchParams,
 }: {
-  searchParams: MentionFilters;
+  searchParams: MentionFilters & { page?: string; pageSize?: string };
 }) {
   const brand = await getActiveBrand();
+
+  const page = Math.max(1, Number(searchParams.page) || 1);
+  const pageSize = PAGE_SIZE_OPTIONS.includes(Number(searchParams.pageSize))
+    ? Number(searchParams.pageSize)
+    : DEFAULT_PAGE_SIZE;
+
   const where = buildMentionWhere(brand.id, searchParams);
 
   const [mentions, total, savedViews] = await Promise.all([
@@ -21,7 +29,8 @@ export default async function MentionsPage({
       where,
       include: { analysis: true },
       orderBy: { publishedAt: "desc" },
-      take: 100,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     }),
     prisma.mention.count({ where }),
     prisma.savedFilter.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "asc" } }),
@@ -33,7 +42,7 @@ export default async function MentionsPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">All Mentions</h1>
           <p className="text-sm text-muted-foreground">
-            {total} mention cocok dengan filter aktif (maks. 100 ditampilkan).
+            {total} mention cocok dengan filter aktif.
           </p>
         </div>
       </div>
@@ -55,6 +64,7 @@ export default async function MentionsPage({
 
       <FilterBar />
       <MentionTable mentions={mentions} />
+      <PaginationControls page={page} pageSize={pageSize} total={total} itemLabel="mention" />
     </div>
   );
 }

@@ -22,7 +22,7 @@ export function PeriodFilter() {
 
   function setPeriod(kv: Record<string, string>) {
     const next = new URLSearchParams(params.toString());
-    ["range", "month", "year"].forEach((k) => next.delete(k));
+    ["range", "month", "year", "page"].forEach((k) => next.delete(k));
     for (const [k, v] of Object.entries(kv)) if (v) next.set(k, v);
     const qs = next.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);

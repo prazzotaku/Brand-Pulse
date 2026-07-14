@@ -65,9 +65,7 @@ export default async function SourcesPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Data Sources</h1>
         <p className="text-sm text-muted-foreground">
-          Aplikasi kini berjalan dalam mode live-only. Semua crawl target aktif dibangun dari akun yang Anda
-          daftarkan di Settings.
-        </p>
+</p>
       </div>
 
       <Card>
