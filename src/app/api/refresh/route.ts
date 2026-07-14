@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
-import { resolveConnector } from "@/lib/connectors/registry";
+import { getConnectors } from "@/lib/connectors/registry";
 import { detectNegativeSpike, ingestMentions } from "@/lib/pipeline";
 import type { RawMention } from "@/lib/types";
-import type { FetchTarget, SourceConnector } from "@/lib/connectors/types";
+import type { FetchScope, FetchTarget, SourceConnector } from "@/lib/connectors/types";
 
-// Fan-out ke banyak connector live + AI analysis bisa lebih lambat dari
-// default 10s Vercel. 60s adalah maksimum yang diizinkan Hobby plan.
 export const maxDuration = 60;
 
-/** Retry dengan exponential backoff (2 percobaan ulang: 300ms, 1200ms). */
 async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): Promise<RawMention[]> {
   const delays = [300, 1200];
   let lastError: unknown;
@@ -20,7 +17,6 @@ async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): 
     } catch (err) {
       lastError = err;
       const classified = connector.handleError(err);
-      // Auth/rate-limit tidak akan sembuh dengan retry cepat — langsung lempar.
       if (classified.status === "pending_auth" || classified.status === "rate_limited") throw err;
       if (attempt < delays.length) await new Promise((r) => setTimeout(r, delays[attempt]));
     }
@@ -28,13 +24,71 @@ async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): 
   throw lastError;
 }
 
+function normalizeHandleOrUrl(input: string): string {
+  return input.trim().replace(/^https?:\/\/(www\.)?[^/]+\//i, "").replace(/^@+/, "").replace(/\/+$/, "");
+}
+
+function normalizePublicQuery(input: string): string {
+  return normalizeHandleOrUrl(input).replace(/\([^)]*\)/g, "").trim();
+}
+
+function connectorForTarget(target: FetchTarget): SourceConnector | null {
+  return (
+    getConnectors().find((c) => {
+      if (c.meta.platform !== target.platform) return false;
+      if (target.connectorHint) return c.meta.method === target.connectorHint;
+      return true;
+    }) ?? null
+  );
+}
+
+function scopeForPlatform(platform: string): FetchScope | null {
+  if (["facebook", "instagram"].includes(platform)) return "owned_account";
+  if (["x", "threads", "tiktok", "youtube"].includes(platform)) return "public_keyword";
+  return null;
+}
+
+function buildTargetFromAccount(acc: {
+  id: string;
+  platform: string;
+  handle: string;
+  displayName: string;
+}): FetchTarget | null {
+  const scope = scopeForPlatform(acc.platform);
+  if (!scope) return null;
+
+  if (scope === "owned_account") {
+    const handle = normalizeHandleOrUrl(acc.handle);
+    if (!handle) return null;
+    return {
+      scope,
+      platform: acc.platform,
+      query: handle,
+      handle,
+      targetId: acc.id,
+      limit: 15,
+    };
+  }
+
+  const query = normalizePublicQuery(acc.displayName || acc.handle);
+  if (!query) return null;
+  return {
+    scope,
+    platform: acc.platform,
+    query,
+    handle: normalizeHandleOrUrl(acc.handle),
+    targetId: acc.id,
+    limit: 15,
+  };
+}
+
 /**
- * POST /api/refresh — background crawl job penuh:
- * 1. Bangun daftar "fetch target" dari SourceAccount (akun milik sendiri) dan
- *    SearchProfile (pencarian publik).
- * 2. Untuk setiap target, resolve connector yang sesuai (platform+scope).
- * 3. Jalankan setiap fetch secara independen, catat sebagai CrawlRun per target.
- * 4. Error/rate limit per target tidak menjatuhkan job refresh keseluruhan.
+ * POST /api/refresh
+ *
+ * Target refresh dibangun dari akun aktif di Settings:
+ * - Facebook / Instagram → crawl akun langsung lewat handle/URL
+ * - X / Threads / TikTok / YouTube → pencarian publik berbasis nama akun
+ * - News / Blog → query brand sekali per connector
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -42,10 +96,7 @@ export async function POST(req: NextRequest) {
 
   const brand = await getActiveBrand();
   const brandCtx = toBrandContext(brand);
-  const [sourceAccounts, searchProfiles] = await Promise.all([
-    prisma.sourceAccount.findMany({ where: { brandId: brand.id, isActive: true } }),
-    prisma.searchProfile.findMany({ where: { brandId: brand.id, isActive: true } }),
-  ]);
+  const sourceAccounts = await prisma.sourceAccount.findMany({ where: { brandId: brand.id, isActive: true } });
 
   const job = await prisma.refreshJob.create({
     data: {
@@ -65,51 +116,48 @@ export async function POST(req: NextRequest) {
     let failedSources = 0;
     const failures: string[] = [];
 
-    // --- 1. Bangun daftar fetch target ---
     const targets: FetchTarget[] = [];
-    // Target dari akun milik sendiri (SourceAccount)
     for (const acc of sourceAccounts) {
-      targets.push({
-        scope: "owned_account",
-        platform: acc.platform,
-        handle: acc.handle,
-        query: acc.handle, // query fallback
-        targetId: acc.id,
-        limit: 15,
-      });
+      const target = buildTargetFromAccount(acc);
+      if (!target) {
+        console.warn(`[REFRESH] Lewati akun ${acc.platform}/${acc.handle}: target tidak valid atau platform belum didukung.`);
+        continue;
+      }
+      targets.push(target);
     }
-    // Target dari profil pencarian publik (SearchProfile)
-    for (const p of searchProfiles) {
-      if (!p.platform) continue; // profil lama tanpa platform eksplisit — lewati
-      targets.push({
-        scope: p.scope === "public_hashtag" ? "public_hashtag" : "public_keyword",
-        platform: p.platform,
-        query: p.query,
-        targetId: p.id,
-        limit: 15,
-      });
+
+    const allConnectors = getConnectors();
+    const addedQueryTargets = new Set<string>();
+
+    // Jalankan juga connector yang tidak berbasis akun: News dan Blog.
+    for (const connector of allConnectors) {
+      if (!["news", "blog"].includes(connector.meta.platform)) continue;
+      if (connector.meta.method === "manual_import") continue;
+
+      const key = `${connector.meta.platform}:${connector.meta.method}`;
+      if (addedQueryTargets.has(key)) continue;
+      addedQueryTargets.add(key);
+
+      const target: FetchTarget = {
+        scope: "public_keyword",
+        platform: connector.meta.platform,
+        connectorHint: connector.meta.method,
+        query: brand.name,
+        limit: 20,
+      };
+      targets.push(target);
     }
-    // Fallback transisi: jika belum ada SourceAccount untuk Instagram, pakai
-    // instagramHandle dari Brand (perilaku lama).
-    if (!targets.some((t) => t.platform === "instagram" && t.scope === "owned_account") && brand.instagramHandle) {
-      targets.push({
-        scope: "owned_account",
-        platform: "instagram",
-        handle: brand.instagramHandle,
-        query: brand.instagramHandle,
-        limit: 15,
-      });
-    }
+
 
     console.log(`[REFRESH] Ditemukan ${targets.length} fetch target untuk brand "${brand.name}".`);
 
     for (const target of targets) {
-      // --- 2. Resolve connector & jalankan fetch ---
-      const connector = resolveConnector(target.platform, target.scope);
+      const connector = connectorForTarget(target);
       if (!connector) {
-        console.warn(`[REFRESH] Tidak ada connector untuk platform=${target.platform}, scope=${target.scope}. Lewati.`);
+        console.warn(`[REFRESH] Tidak ada connector untuk platform=${target.platform}${target.connectorHint ? ` (${target.connectorHint})` : ""}. Lewati.`);
         continue;
       }
+      console.log(`[REFRESH] Jalankan ${target.platform}${target.connectorHint ? `/${target.connectorHint}` : ""} dengan query="${target.handle ?? target.query}"`);
 
       const run = await prisma.crawlRun.create({
         data: {
@@ -117,8 +165,7 @@ export async function POST(req: NextRequest) {
           refreshJobId: job.id,
           connector: target.platform,
           scope: target.scope,
-          sourceAccountId: target.scope === "owned_account" ? target.targetId : undefined,
-          searchProfileId: target.scope.startsWith("public") ? target.targetId : undefined,
+          sourceAccountId: target.targetId,
           status: "running",
         },
       });
@@ -155,7 +202,10 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         const classified = connector.handleError(err);
         const errorDetail = classified.detail ?? String(err);
-        console.error(`[REFRESH] Target gagal: platform=${target.platform}, scope=${target.scope}, query="${target.query}". Error:`, errorDetail);
+        console.error(
+          `[REFRESH] Target gagal: platform=${target.platform}, scope=${target.scope}, query="${target.handle ?? target.query}". Error:`,
+          errorDetail
+        );
         failedSources++;
         failures.push(`${target.platform} (${target.scope}): ${errorDetail}`);
         await prisma.crawlRun.update({

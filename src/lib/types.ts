@@ -155,12 +155,12 @@ export interface BrandContext {
   issueKeywords: string[];
 }
 
-/** Asal data mention: pembeda data simulasi vs data nyata. */
+/** Asal data mention: pembeda data legacy vs data nyata. */
 export type MentionOrigin = "mock" | "rss" | "api" | "import";
 
 /** Input mention mentah dari connector, sebelum masuk DB. */
 export interface RawMention {
-  /** mock (simulasi) | rss (feed publik nyata) | api (API resmi) | import (upload user). */
+  /** mock (legacy lama) | rss (feed publik nyata) | api (API resmi) | import (upload user). */
   origin?: MentionOrigin;
   sourcePlatform: SourcePlatform;
   sourceType: SourceType;

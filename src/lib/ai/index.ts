@@ -1,5 +1,4 @@
 import type { AIProvider } from "./provider";
-import { MockAIProvider } from "./mock-provider";
 import { AnthropicProvider } from "./anthropic-provider";
 import { DeepSeekProvider } from "./deepseek-provider";
 import { GeminiProvider } from "./gemini-provider";
@@ -14,7 +13,6 @@ import { GeminiProvider } from "./gemini-provider";
  *     Dikontrol env CONTENT_AI_PROVIDER (fallback: AI_PROVIDER, default: deepseek).
  *
  * Provider yang tersedia (untuk kedua role):
- *   mock       → rule-based, tanpa API key
  *   anthropic  → Claude via Anthropic API (butuh ANTHROPIC_API_KEY)
  *   deepseek   → DeepSeek (butuh DEEPSEEK_API_KEY), model via DEEPSEEK_MODEL
  *   gemini     → Google Gemini (butuh GEMINI_API_KEY), model via GEMINI_MODEL
@@ -24,10 +22,20 @@ let cachedIntelligence: AIProvider | null = null;
 let cachedContent: AIProvider | null = null;
 
 function buildProvider(name: string): AIProvider {
+  // Provider yang diminta tersedia → pakai langsung.
   if (name === "anthropic" && process.env.ANTHROPIC_API_KEY) return new AnthropicProvider();
   if (name === "deepseek" && process.env.DEEPSEEK_API_KEY) return new DeepSeekProvider();
   if (name === "gemini" && process.env.GEMINI_API_KEY) return new GeminiProvider();
-  return new MockAIProvider();
+
+  // Fallback konfigurasi: prioritaskan DeepSeek bila tersedia, lalu Gemini,
+  // lalu Anthropic. TIDAK ada fallback ke mock lagi.
+  if (process.env.DEEPSEEK_API_KEY) return new DeepSeekProvider();
+  if (process.env.GEMINI_API_KEY) return new GeminiProvider();
+  if (process.env.ANTHROPIC_API_KEY) return new AnthropicProvider();
+
+  throw new Error(
+    `Tidak ada provider AI live yang terkonfigurasi. Cek env AI_PROVIDER/INTELLIGENCE_AI_PROVIDER/CONTENT_AI_PROVIDER serta API key terkait.`
+  );
 }
 
 export function getAI(role: "intelligence" | "content" = "intelligence"): AIProvider {

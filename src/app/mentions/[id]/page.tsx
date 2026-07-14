@@ -66,8 +66,7 @@ export default async function MentionDetailPage({ params }: { params: { id: stri
               </a>
               {mention.origin === "mock" && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Ini data simulasi (mock) — URL mengikuti pola platform asli tapi halamannya tidak
-                  benar-benar ada, jadi akan 404. Data live (RSS/API/import) memakai URL nyata.
+                  Ini data lama dari konfigurasi sebelumnya — tautan sumber bisa jadi sudah tidak tersedia.
                 </p>
               )}
             </div>

@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { parseJsonArray } from "@/lib/types";
-import { AddAccountForm, AddSearchProfileForm } from "@/components/accounts/account-forms";
+import { AddAccountForm, DeleteAccountButton } from "@/components/accounts/account-forms";
 import { PlatformBadge } from "@/components/shared/badges";
 
 export const dynamic = "force-dynamic";
@@ -27,16 +27,10 @@ export default async function SettingsPage({
   searchParams: { saved?: string };
 }) {
   const brand = await getActiveBrand();
-  const [accounts, searchProfiles] = await Promise.all([
-    prisma.sourceAccount.findMany({
-      where: { brandId: brand.id, isActive: true },
-      orderBy: [{ accountType: "asc" }, { platform: "asc" }, { handle: "asc" }],
-    }),
-    prisma.searchProfile.findMany({
-      where: { brandId: brand.id, isActive: true },
-      orderBy: [{ platform: "asc" }, { name: "asc" }],
-    }),
-  ]);
+  const accounts = await prisma.sourceAccount.findMany({
+    where: { brandId: brand.id, isActive: true },
+    orderBy: [{ accountType: "asc" }, { platform: "asc" }, { handle: "asc" }],
+  });
 
   async function updateBrand(formData: FormData) {
     "use server";
@@ -156,10 +150,10 @@ export default async function SettingsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Owned Accounts</CardTitle>
+          <CardTitle>Tracked Accounts</CardTitle>
           <CardDescription>
-            Daftarkan akun media sosial milik brand (own) atau kompetitor. Akun "own" akan dipakai untuk
-            menarik konten (post/video) dan komentar.
+            Daftarkan akun media sosial milik brand (own) atau kompetitor. Facebook/Instagram di-crawl lewat
+            akun langsung, sedangkan X/Threads/TikTok/YouTube memakai pencarian publik berbasis nama akun.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -181,6 +175,7 @@ export default async function SettingsPage({
                       <span className="rounded-full border px-2 py-0.5 text-xs">
                         {acc.accountType === "own" ? "own" : "kompetitor"}
                       </span>
+                      <DeleteAccountButton id={acc.id} label={acc.displayName || acc.handle} />
                     </div>
                   </div>
                 ))}
@@ -194,49 +189,13 @@ export default async function SettingsPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Public Search Profiles</CardTitle>
-          <CardDescription>
-            Definisikan target pencarian publik (keyword/hashtag) di berbagai platform untuk menangkap
-            mention di luar akun sendiri.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <AddSearchProfileForm />
-          {searchProfiles.length > 0 ? (
-            <div className="space-y-2 rounded-md border p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Profil pencarian aktif
-              </p>
-              <div className="space-y-2 text-sm">
-                {searchProfiles.map((p) => (
-                  <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
-                    <div>
-                      <p className="font-medium">{p.name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">{p.query}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {p.platform ? <PlatformBadge platform={p.platform} /> : null}
-                      <span className="rounded-full border px-2 py-0.5 text-xs">{p.scope || "public_keyword"}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Belum ada search profile aktif.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>AI & Autentikasi</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
             <strong className="text-foreground">AI provider:</strong> diatur lewat env{" "}
-            <code className="font-mono">AI_PROVIDER</code> (<code className="font-mono">mock</code> tanpa API key,{" "}
-            <code className="font-mono">anthropic</code> dengan <code className="font-mono">ANTHROPIC_API_KEY</code>).
+            <code className="font-mono">AI_PROVIDER</code> (mis. <code className="font-mono">gemini</code>,{" "}
+            <code className="font-mono">anthropic</code>) dan API key masing-masing.
             Provider lain tinggal implement interface <code className="font-mono">AIProvider</code>.
           </p>
           <p>

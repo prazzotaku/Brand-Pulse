@@ -9,8 +9,7 @@
     "lint": "next lint",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:seed:mock": "tsx prisma/upgrade-sources.ts && tsx prisma/seed-mock.ts",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts && tsx prisma/upgrade-sources.ts && tsx prisma/seed-mock.ts",
+    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

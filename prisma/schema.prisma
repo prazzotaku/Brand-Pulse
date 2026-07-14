@@ -49,7 +49,6 @@ model Brand {
   createdAt        DateTime        @default(now())
   keywords         BrandKeyword[]
   sources          Source[]
-  searchProfiles   SearchProfile[]
   mentions         Mention[]
   alerts           Alert[]
   savedFilters     SavedFilter[]
@@ -80,33 +79,13 @@ model Source {
   brand      Brand     @relation(fields: [brandId], references: [id])
   platform   String // facebook | instagram | x | threads | tiktok | news | rss | manual
   name       String
-  method     String // official_api | rss | manual_import | mock
-  status     String    @default("mock") // connected | mock | limited | pending | quota_exceeded | error
+  method     String // official_api | rss | manual_import
+  status     String    @default("pending") // connected | limited | pending | quota_exceeded | error
   config     String    @default("{}") // JSON: endpoint, feed URL, scope, dsb.
   notes      String    @default("")
   lastSyncAt DateTime?
   createdAt  DateTime  @default(now())
   mentions   Mention[]
-
-  @@index([brandId, platform])
-}
-
-model SearchProfile {
-  id              String   @id @default(cuid())
-  brandId         String
-  brand           Brand    @relation(fields: [brandId], references: [id])
-  name            String
-  query           String
-  booleanQuery    String   @default("")
-  // Target platform pencarian publik: facebook | instagram | x | threads | tiktok | ...
-  platform        String   @default("")
-  // Mode pencarian: public_keyword (frasa/keyword bebas) | public_hashtag (hashtag spesifik)
-  scope           String   @default("public_keyword")
-  filters         String   @default("{}") // JSON snapshot filter
-  refreshInterval String   @default("manual") // manual | 5m | 30m | 1h
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  crawlRuns       CrawlRun[]
 
   @@index([brandId, platform])
 }
@@ -134,8 +113,8 @@ model Mention {
   language        String           @default("id")
   mediaTier       String           @default("") // tier1 | tier2 | local | blog | aggregator (khusus news)
   rawPayload      String           @default("{}") // JSON payload asli dari connector
-  // Asal data: mock | rss | api | import — pembeda data simulasi vs data nyata
-  origin          String           @default("mock")
+  // Asal data: rss | api | import — pembeda sumber publik, provider, atau upload user
+  origin          String
   // --- Deduplication ---
   contentHash          String    @default("") // hash(platform+author+konten ternormalisasi+tanggal)
   isDuplicate          Boolean   @default(false)
@@ -346,13 +325,11 @@ model CrawlRun {
   brand        Brand     @relation(fields: [brandId], references: [id])
   refreshJobId String    @default("")
   connector    String // platform connector yang dijalankan
-  // Target spesifik crawl ini — salah satu dari dua relasi berikut (atau
-  // keduanya kosong untuk connector lama yang belum pakai target eksplisit).
+  // Target spesifik crawl ini — akun owned yang di-crawl (kosong untuk
+  // connector lama yang belum pakai target eksplisit).
   sourceAccountId String?
   sourceAccount    SourceAccount? @relation(fields: [sourceAccountId], references: [id])
-  searchProfileId  String?
-  searchProfile    SearchProfile? @relation(fields: [searchProfileId], references: [id])
-  // Mode fetch: owned_account | public_keyword | public_hashtag
+  // Mode fetch saat crawl dijalankan: owned_account | public_keyword | public_hashtag
   scope        String    @default("")
   status       String    @default("running") // success | error | rate_limited | pending_auth | skipped
   fetched      Int       @default(0)
@@ -365,7 +342,6 @@ model CrawlRun {
 
   @@index([brandId, startedAt])
   @@index([sourceAccountId])
-  @@index([searchProfileId])
 }
 
 model ConnectorCredential {
@@ -486,8 +462,7 @@ model RefreshJob {
 }
 
 // Log token AI — satu baris per panggilan LLM sungguhan (Gemini/DeepSeek/
-// Anthropic). Provider mock tidak mencatat di sini (tidak pakai token nyata).
-// Dipakai halaman Token Meter untuk memantau pemakaian & mendeteksi lonjakan.
+// Anthropic). Digunakan untuk halaman Token Meter.
 model AiUsageLog {
   id               String   @id @default(cuid())
   provider         String // gemini | deepseek | anthropic
