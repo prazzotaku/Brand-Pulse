@@ -158,7 +158,7 @@ export interface IngestResult {
 
 /**
  * Pipeline ingest: Collect → dedup → simpan → analyze.
- * Dipakai oleh mock connector refresh, manual import CSV/JSON, dan seed.
+ * Dipakai oleh refresh connector live, manual import CSV/JSON, dan seed.
  *
  * Deduplication dua lapis (angka summary tidak boleh naik karena duplikasi):
  * 1. (sourcePlatform, externalId) sama → item yang sama di-fetch ulang:
@@ -244,7 +244,7 @@ export async function ingestMentions(
         language: raw.language,
         mediaTier: raw.mediaTier ?? "",
         rawPayload: JSON.stringify(raw.rawPayload ?? {}),
-        origin: raw.origin ?? "mock",
+        origin: raw.origin ?? "api",
         contentHash: hash,
         firstSeenAt: now,
         lastSeenAt: now,
@@ -252,33 +252,42 @@ export async function ingestMentions(
     });
     result.inserted++;
 
-    let analysis: AIAnalysisResult;
+    let analysis: AIAnalysisResult | null = null;
     const explicitBrandHit = hasExplicitBrandMention(raw, brandCtx);
 
     if (!explicitBrandHit) {
       const competitor = findCompetitorInMention(raw, brandCtx);
       analysis = buildIrrelevantAnalysis(competitor);
     } else {
-      analysis = await ai.analyzeMention(
-        {
-          sourcePlatform: raw.sourcePlatform,
-          sourceType: raw.sourceType,
-          title: raw.title,
-          content: raw.content,
-          authorName: raw.authorName,
-          authorHandle: raw.authorHandle,
-          engagementCount: raw.engagementCount,
-          mediaTier: raw.mediaTier || undefined,
-        },
-        brandCtx
-      );
+      try {
+        analysis = await ai.analyzeMention(
+          {
+            sourcePlatform: raw.sourcePlatform,
+            sourceType: raw.sourceType,
+            title: raw.title,
+            content: raw.content,
+            authorName: raw.authorName,
+            authorHandle: raw.authorHandle,
+            engagementCount: raw.engagementCount,
+            mediaTier: raw.mediaTier || undefined,
+          },
+          brandCtx
+        );
+      } catch (err) {
+        console.warn(
+          `[pipeline] AI analysis gagal untuk mention ${mention.id} (${raw.sourcePlatform}/${raw.sourceType}) — disimpan tanpa analysis:`,
+          err
+        );
+      }
     }
 
-    await prisma.mentionAnalysis.create({
-      data: { mentionId: mention.id, ...analysisToDb(analysis) },
-    });
-    await persistAnalysisExtras(brandId, mention.id, raw.sourcePlatform, analysis);
-    result.analyzed++;
+    if (analysis) {
+      await prisma.mentionAnalysis.create({
+        data: { mentionId: mention.id, ...analysisToDb(analysis) },
+      });
+      await persistAnalysisExtras(brandId, mention.id, raw.sourcePlatform, analysis);
+      result.analyzed++;
+    }
   }
 
   return result;
@@ -291,32 +300,41 @@ export async function analyzePending(brandId: string, brandCtx: BrandContext): P
     where: { brandId, analysis: null },
     take: 100,
   });
+  let analyzed = 0;
   for (const m of pending) {
-    let result: AIAnalysisResult;
+    let result: AIAnalysisResult | null = null;
     const explicitBrandHit = hasExplicitBrandMention(m, brandCtx);
 
     if (!explicitBrandHit) {
       const competitor = findCompetitorInMention(m, brandCtx);
       result = buildIrrelevantAnalysis(competitor);
     } else {
-      result = await ai.analyzeMention(
-        {
-          sourcePlatform: m.sourcePlatform,
-          sourceType: m.sourceType,
-          title: m.title,
-          content: m.content,
-          authorName: m.authorName,
-          authorHandle: m.authorHandle,
-          engagementCount: m.engagementCount,
-          mediaTier: m.mediaTier || undefined,
-        },
-        brandCtx
-      );
+      try {
+        result = await ai.analyzeMention(
+          {
+            sourcePlatform: m.sourcePlatform,
+            sourceType: m.sourceType,
+            title: m.title,
+            content: m.content,
+            authorName: m.authorName,
+            authorHandle: m.authorHandle,
+            engagementCount: m.engagementCount,
+            mediaTier: m.mediaTier || undefined,
+          },
+          brandCtx
+        );
+      } catch (err) {
+        console.warn(`[pipeline] analyzePending gagal untuk mention ${m.id} — dibiarkan tanpa analysis:`, err);
+      }
     }
-    await prisma.mentionAnalysis.create({ data: { mentionId: m.id, ...analysisToDb(result) } });
-    await persistAnalysisExtras(brandId, m.id, m.sourcePlatform, result);
+
+    if (result) {
+      await prisma.mentionAnalysis.create({ data: { mentionId: m.id, ...analysisToDb(result) } });
+      await persistAnalysisExtras(brandId, m.id, m.sourcePlatform, result);
+      analyzed++;
+    }
   }
-  return pending.length;
+  return analyzed;
 }
 
 /**

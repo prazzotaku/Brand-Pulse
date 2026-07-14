@@ -46,14 +46,14 @@ export interface MentionInsightSnapshot {
 /**
  * Abstraksi AI layer. Semua fitur AI (sentiment, ide konten, hook review,
  * report summary) lewat interface ini sehingga model/provider bisa
- * diganti-ganti (mock, Anthropic, dst) tanpa menyentuh kode aplikasi.
+ * diganti-ganti (Gemini, Anthropic, DeepSeek, dst) tanpa menyentuh kode aplikasi.
  */
 export interface AIProvider {
   readonly name: string;
   analyzeMention(mention: MentionForAnalysis, brand: BrandContext): Promise<AIAnalysisResult>;
   /**
-   * Varian analyzeMention TANPA fallback otomatis ke mock — melempar error
-   * asli. Opsional: hanya provider LLM (bukan MockAIProvider) yang punya ini.
+   * Varian analyzeMention TANPA fallback otomatis — melempar error asli.
+   * Opsional: dipakai provider LLM untuk batch/backfill yang ingin retry sendiri.
    * Dipakai script batch/backfill yang ingin retry sendiri.
    */
   analyzeMentionStrict?(mention: MentionForAnalysis, brand: BrandContext): Promise<AIAnalysisResult>;

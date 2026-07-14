@@ -4,8 +4,8 @@ import { PlatformBadge } from "@/components/shared/badges";
 import { ImportForm } from "@/components/sources/import-form";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
-import { getConnectorDirectory, isMockMode } from "@/lib/connectors/registry";
-import { formatDateTime, formatNumber } from "@/lib/utils";
+import { getConnectorDirectory } from "@/lib/connectors/registry";
+import { formatDateTime } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -31,62 +31,42 @@ const RUN_STATUS_LABEL: Record<string, string> = {
 export default async function SourcesPage() {
   const brand = await getActiveBrand();
   const directory = getConnectorDirectory();
-  const mockMode = isMockMode();
 
-  const [accounts, searchProfiles, latestRuns] = await Promise.all([
+  const [accounts, latestRuns] = await Promise.all([
     prisma.sourceAccount.findMany({ where: { brandId: brand.id } }),
-    prisma.searchProfile.findMany({ where: { brandId: brand.id } }),
     prisma.crawlRun.findMany({
       where: { brandId: brand.id },
       orderBy: { startedAt: "desc" },
-      take: 100, // Ambil lebih banyak untuk mencakup semua target
-      include: { sourceAccount: true, searchProfile: true },
+      take: 100,
+      include: { sourceAccount: true },
     }),
   ]);
 
-  const lastRunByTarget = new Map<string, (typeof latestRuns)[number]>();
+  const lastRunByAccount = new Map<string, (typeof latestRuns)[number]>();
   for (const r of latestRuns) {
-    const targetKey = r.sourceAccountId ?? r.searchProfileId;
-    if (targetKey && !lastRunByTarget.has(targetKey)) {
-      lastRunByTarget.set(targetKey, r);
+    if (r.sourceAccountId && !lastRunByAccount.has(r.sourceAccountId)) {
+      lastRunByAccount.set(r.sourceAccountId, r);
     }
   }
 
-  // Buat daftar target dari SourceAccount dan SearchProfile
   const ownedTargets = accounts
     .filter((a) => a.isActive)
     .map((a) => ({
       key: a.id,
       name: a.displayName || a.handle,
       platform: a.platform,
-      scope: "owned_account",
-      run: lastRunByTarget.get(a.id),
-    }));
-
-  const publicTargets = searchProfiles
-    .filter((p) => p.isActive)
-    .map((p) => ({
-      key: p.id,
-      name: p.name,
-      platform: p.platform,
-      scope: p.scope,
-      run: lastRunByTarget.get(p.id),
-    }));
-
-  const allTargets = [...ownedTargets, ...publicTargets].sort((a, b) =>
-    a.platform.localeCompare(b.platform) || a.name.localeCompare(b.name)
-  );
+      scope: ["facebook", "instagram"].includes(a.platform) ? "owned_account" : "public_keyword",
+      run: lastRunByAccount.get(a.id),
+    }))
+    .sort((a, b) => a.platform.localeCompare(b.platform) || a.name.localeCompare(b.name));
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Data Sources</h1>
         <p className="text-sm text-muted-foreground">
-          Mode aktif:{" "}
-          <span className={`font-semibold ${mockMode ? "text-amber-700" : "text-emerald-700"}`}>
-            {mockMode ? "MOCK (data simulasi)" : "LIVE (data nyata)"}
-          </span>
-          . Ubah lewat <code className="font-mono">MOCK_CONNECTORS</code> di <code className="font-mono">.env</code>.
+          Aplikasi kini berjalan dalam mode live-only. Semua crawl target aktif dibangun dari akun yang Anda
+          daftarkan di Settings.
         </p>
       </div>
 
@@ -94,12 +74,12 @@ export default async function SourcesPage() {
         <CardHeader>
           <CardTitle>Crawl Targets</CardTitle>
           <CardDescription>
-            Daftar target fetch yang aktif (dari Owned Accounts dan Public Search Profiles di Settings).
-            Setiap target di-crawl secara independen saat refresh.
+            Daftar akun aktif yang dipakai saat refresh. Untuk Facebook/Instagram sistem menarik akun langsung,
+            sedangkan untuk X/Threads/TikTok/YouTube sistem memakai pencarian publik berbasis nama akun.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          {allTargets.map((t) => {
+          {ownedTargets.map((t) => {
             const status = t.run?.status ?? "pending";
             const style = RUN_STATUS_STYLE[status] ?? "bg-slate-100 text-slate-600 border-slate-200";
             const label = RUN_STATUS_LABEL[status] ?? "menunggu";
@@ -127,9 +107,9 @@ export default async function SourcesPage() {
               </Card>
             );
           })}
-          {allTargets.length === 0 && (
+          {ownedTargets.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground md:col-span-2">
-              Belum ada target aktif. Konfigurasikan Owned Accounts atau Public Search Profiles di halaman Settings.
+              Belum ada target aktif. Konfigurasikan akun di halaman Settings.
             </p>
           )}
         </CardContent>
@@ -159,7 +139,6 @@ export default async function SourcesPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <PlatformBadge platform={c.platform} />
                   <Badge variant="outline" className="font-mono text-xs">{c.method}</Badge>
-                  {c.mock && <Badge variant="secondary" className="text-xs">mock</Badge>}
                 </div>
               </CardHeader>
               <CardContent className="space-y-1.5 text-sm">
@@ -205,4 +184,3 @@ export default async function SourcesPage() {
     </div>
   );
 }
-

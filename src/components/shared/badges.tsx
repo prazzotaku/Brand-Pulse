@@ -33,9 +33,9 @@ export function PlatformBadge({ platform }: { platform: string }) {
 
 const ORIGIN_META: Record<string, { label: string; style: string; title: string }> = {
   mock: {
-    label: "Mock",
+    label: "Legacy",
     style: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800",
-    title: "Data simulasi dari mock connector — konten & URL tidak benar-benar ada (link akan 404).",
+    title: "Data lama dari konfigurasi sebelumnya. Tautan sumber mungkin tidak lagi tersedia.",
   },
   rss: {
     label: "Live",
@@ -54,9 +54,9 @@ const ORIGIN_META: Record<string, { label: string; style: string; title: string 
   },
 };
 
-/** Pembeda data simulasi vs data nyata — selalu dengan label teks + tooltip. */
+/** Pembeda asal data — selalu dengan label teks + tooltip. */
 export function OriginBadge({ origin }: { origin: string }) {
-  const meta = ORIGIN_META[origin] ?? ORIGIN_META.mock;
+  const meta = ORIGIN_META[origin] ?? ORIGIN_META.import;
   return (
     <span
       title={meta.title}

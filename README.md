@@ -7,7 +7,7 @@ Dashboard AI untuk monitoring brand dari berbagai sumber publik — Facebook, In
 ```bash
 npm install        # otomatis menjalankan prisma generate
 npm run db:push    # buat database (SQLite dev)
-npm run db:seed    # isi brand contoh "Bank Jakarta" + 56 mention mock
+npm run db:seed    # isi brand contoh "Bank Jakarta" + sumber data live
 npm run dev        # buka http://localhost:3000
 ```
 
@@ -22,7 +22,7 @@ Reset data kapan pun: `npm run db:reset`.
 | Chart | Recharts |
 | API | Next.js API Routes (`src/app/api/*`) |
 | Database | Prisma — SQLite untuk dev, **PostgreSQL/Supabase untuk produksi** |
-| AI Layer | Abstraction `AIProvider` (mock rule-based / Anthropic Claude) |
+| AI Layer | Abstraction `AIProvider` (Gemini / Anthropic / DeepSeek) |
 | Auth | Basic auth via middleware (opsional), siap upgrade ke NextAuth |
 | Scheduler | Client-side interval (manual/5m/30m/1h) → job pipeline server; siap naik ke Redis/BullMQ |
 
@@ -36,7 +36,7 @@ Schema sengaja ditulis portable (union types sebagai `String`, JSON sebagai stri
 
 ## Mengganti AI Provider
 
-- Default: `AI_PROVIDER=mock` — analisis rule-based deterministik, tanpa API key.
+- Set `AI_PROVIDER` ke `gemini`, `anthropic`, atau `deepseek`, lalu isi API key provider yang sesuai.
 - Claude: set `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY` (model via `ANTHROPIC_MODEL`).
 - Provider lain: implement interface `AIProvider` di `src/lib/ai/provider.ts`, daftarkan di `src/lib/ai/index.ts`.
 
@@ -55,26 +55,24 @@ Kontrak output analisis mengikuti PRD:
 
 Semua sumber data lewat interface `SourceConnector` (`src/lib/connectors/types.ts`). MVP memakai:
 
-- **MockConnector** untuk Facebook, Instagram, X, Threads, TikTok, News — mensimulasikan API resmi.
-- **RssSampleConnector** untuk blog/RSS.
-- **Manual import** CSV/JSON di halaman Sources (kolom minimal `content`; lihat `sample-import.csv`).
+- **Apify connector** untuk Facebook, Instagram, X, Threads, dan TikTok bila `APIFY_TOKEN` tersedia.
+- **Official API / RSS connector** untuk YouTube, Google News, blog, dan platform resmi lain.
+- **Manual import** CSV/JSON di halaman Sources.
 
-Prinsip: tidak bypass login/captcha/paywall, tidak scraping agresif, patuh robots.txt, hanya data publik/berizin, selalu simpan source URL. Untuk produksi ganti mock dengan Meta Graph API, Instagram Graph API, X API, Threads API, TikTok Research API, dan News API/GDELT — pipeline (`src/lib/pipeline.ts`) tidak berubah.
+Prinsip: tidak bypass login/captcha/paywall, tidak scraping agresif, patuh robots.txt, hanya data publik/berizin, selalu simpan source URL.
 
 ## Struktur Penting
 
 ```
-prisma/schema.prisma      14 model: User, Workspace, Brand, BrandKeyword, Source,
-                          SearchProfile, Mention, MentionAnalysis, Alert, SavedFilter,
-                          ContentIdea, ContentReview, Report, RefreshJob
-prisma/seed.ts            Seed brand "Bank Jakarta" + mention mock 7 platform
-src/lib/ai/               AI abstraction (mock + Anthropic + factory)
-src/lib/connectors/       Adapter connector + mock data
+prisma/schema.prisma      Model inti untuk brand, mention, analysis, refresh, account tracking, dan reporting
+prisma/seed.ts            Seed brand "Bank Jakarta" + sumber data live
+src/lib/ai/               AI abstraction (Gemini / Anthropic / DeepSeek + factory)
+src/lib/connectors/       Adapter connector live (Apify / API resmi / RSS)
 src/lib/pipeline.ts       Ingest: dedup → simpan → analyze → deteksi spike
 src/lib/filters.ts        Filter engine (URL params → Prisma where)
 src/lib/stats.ts          Agregasi Overview (health score, spike, trend)
 src/app/api/              refresh, import, analyze, content-ideas, hook-review, reports
-src/app/                  12 halaman sidebar (Overview → Settings)
+src/app/                  Halaman dashboard utama (Overview → Settings)
 ```
 
 ## Auth

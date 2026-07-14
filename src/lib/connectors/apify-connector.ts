@@ -7,6 +7,10 @@ function hashString(input: string): string {
   return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
+function normalizeHandleOrUrl(input: string): string {
+  return input.trim().replace(/^https?:\/\/(www\.)?[^/]+\//i, "").replace(/^@+/, "").replace(/\/+$/, "");
+}
+
 const API_BASE = "https://api.apify.com/v2";
 
 async function apifyRun(actorId: string, input: Record<string, unknown>): Promise<any[]> {
@@ -67,12 +71,13 @@ export class ApifyInstagramConnector extends EnvGatedConnector {
     // Format actorId untuk API Apify pakai tilde (~), bukan slash (/):
     // "apify/instagram-scraper" (nama di Store) -> "apify~instagram-scraper" (actorId API).
     const actorId = process.env.APIFY_INSTAGRAM_ACTOR_ID ?? "apify~instagram-scraper";
-    const target = (params.handle ?? params.query).trim();
+    const rawTarget = (params.handle ?? params.query).trim();
+    const target = rawTarget.startsWith("https://") ? rawTarget : normalizeHandleOrUrl(rawTarget);
     console.log(`[ApifyInstagramConnector] owned_account target="${target}" actorId="${actorId}"`);
     if (!target) return [];
 
     // --- Tahap 1: Ambil post dari profil ---
-    const directUrl = target.startsWith("https://") ? target : `https://www.instagram.com/${target}/`;
+    const directUrl = rawTarget.startsWith("https://") ? rawTarget : `https://www.instagram.com/${target}/`;
     console.log(`[ApifyInstagramConnector] Tahap 1: fetching posts dari ${directUrl}`);
     const postItems = await apifyRun(actorId, {
       directUrls: [directUrl],
@@ -242,12 +247,13 @@ export class ApifyFacebookConnector extends EnvGatedConnector {
 
     const postsActorId = process.env.APIFY_FACEBOOK_ACTOR_ID ?? "apify~facebook-posts-scraper";
     const commentsActorId = process.env.APIFY_FACEBOOK_COMMENTS_ACTOR_ID ?? "apify~facebook-comments-scraper";
-    const target = (params.handle ?? params.query).trim();
+    const rawTarget = (params.handle ?? params.query).trim();
+    const target = rawTarget.startsWith("https://") ? rawTarget : normalizeHandleOrUrl(rawTarget);
     console.log(`[ApifyFacebookConnector] owned_account target="${target}" actorId="${postsActorId}"`);
     if (!target) return [];
 
     // --- Tahap 1: Ambil post dari Page ---
-    const directUrl = target.startsWith("https://") ? target : `https://www.facebook.com/${target}`;
+    const directUrl = rawTarget.startsWith("https://") ? rawTarget : `https://www.facebook.com/${target}`;
     console.log(`[ApifyFacebookConnector] Tahap 1: fetching posts dari ${directUrl}`);
     const postItems = await apifyRun(postsActorId, {
       startUrls: [{ url: directUrl }],
@@ -457,6 +463,11 @@ export class ApifyThreadsConnector extends EnvGatedConnector {
       resultsLimit: params.limit ?? 20,
     });
     console.log(`[ApifyThreadsConnector] dapat ${items.length} item mentah`);
+    if (items.length > 0) {
+      console.log(`[ApifyThreadsConnector] Sampel raw data Threads: ${JSON.stringify(items[0], null, 2).slice(0, 1000)}`);
+    } else {
+      console.log(`[ApifyThreadsConnector] Tidak ada hasil untuk query ${query}`);
+    }
     return items.map((it) => this.normalizePost(it, actorId)).filter((p): p is RawMention => p !== null);
   }
 
@@ -530,6 +541,9 @@ export class ApifyTikTokConnector extends EnvGatedConnector {
       resultsPerPage: params.limit ?? 20,
     });
     console.log(`[ApifyTikTokConnector] dapat ${items.length} item mentah`);
+    if (items.length > 0) {
+      console.log(`[ApifyTikTokConnector] Sampel raw data TikTok: ${JSON.stringify(items[0], null, 2).slice(0, 1000)}`);
+    }
     return items.map((it) => this.normalizeVideo(it, actorId)).filter((v): v is RawMention => v !== null);
   }
 

@@ -95,7 +95,7 @@ export default async function CompetitorWatchPage({
             ))}
             <p className="border-t pt-3 text-xs text-muted-foreground">
               Catatan MVP: perbandingan dihitung dari mention brand yang menyinggung kompetitor.
-              Fase berikutnya: search profile khusus per kompetitor di semua connector.
+              Fase berikutnya: crawl akun kompetitor secara langsung di lebih banyak connector.
             </p>
           </CardContent>
         </Card>

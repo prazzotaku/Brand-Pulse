@@ -30,9 +30,7 @@ function sleep(ms: number) {
 }
 
 /**
- * Retry dengan backoff memakai analyzeMentionStrict (melempar error asli,
- * BUKAN analyzeMention biasa yang menelan error dan diam-diam balik mock).
- * Baru menyerah ke mock setelah semua percobaan habis.
+ * Retry dengan backoff memakai analyzeMentionStrict (melempar error asli).
  */
 async function analyzeWithRetry(
   ai: AIProvider,
@@ -46,8 +44,8 @@ async function analyzeWithRetry(
       return await strict(input, brandCtx);
     } catch (err) {
       if (attempt === retries) {
-        console.error(`  menyerah setelah ${retries + 1} percobaan, pakai fallback mock:`, String(err).slice(0, 200));
-        return ai.analyzeMention(input, brandCtx); // fallback mock terakhir, tidak melempar
+        console.error(`  menyerah setelah ${retries + 1} percobaan:`, String(err).slice(0, 200));
+        throw err; // Lempar error terakhir setelah semua percobaan gagal
       }
       await sleep(2000 * (attempt + 1));
     }

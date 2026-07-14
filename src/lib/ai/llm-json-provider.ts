@@ -12,7 +12,6 @@ import type {
   MentionForAnalysis,
   MentionInsightSnapshot,
 } from "./provider";
-import { MockAIProvider } from "./mock-provider";
 import { ISSUE_CATEGORIES, INTENTS } from "../constants";
 import { prisma } from "../prisma";
 
@@ -28,16 +27,15 @@ function toArray<T>(v: unknown): T[] {
 }
 
 /**
- * Base provider untuk LLM yang mengembalikan JSON (Anthropic, DeepSeek, OpenAI,
- * dst.). Semua prompt + parsing + fallback-ke-mock dibagi di sini; subclass
- * cukup mengimplementasikan transport `complete(system, user)`.
+ * Base provider untuk LLM yang mengembalikan JSON (Anthropic, DeepSeek, Gemini,
+ * dst.). Semua prompt + parsing dibagi di sini; subclass cukup mengimplementasikan
+ * transport `complete(system, user)`.
  *
- * Setiap method punya fallback otomatis ke MockAIProvider bila API error/kosong,
- * sehingga dashboard tetap hidup meski API bermasalah atau kuota habis.
+ * Penting: TIDAK ada fallback ke mock lagi. Jika provider live gagal, error
+ * diteruskan ke pemanggil agar aplikasi bisa memberi warning yang jujur.
  */
 export abstract class LLMJsonProvider implements AIProvider {
   abstract readonly name: string;
-  protected fallback = new MockAIProvider();
 
   /**
    * Kirim prompt ke LLM, kembalikan teks jawaban (harus berisi JSON).
@@ -95,8 +93,8 @@ export abstract class LLMJsonProvider implements AIProvider {
     try {
       return await this.analyzeMentionStrict(m, brand);
     } catch (err) {
-      console.error(`[${this.name}] analyzeMention fallback ke mock:`, err);
-      return this.fallback.analyzeMention(m, brand);
+      console.error(`[${this.name}] analyzeMention gagal (tanpa fallback mock):`, err);
+      throw err;
     }
   }
 
@@ -178,8 +176,8 @@ Output: {"isRelevant":false,"relevanceScore":10,"sentiment":"neutral","riskScore
       );
       return this.extractJson<ContentIdeaResult[]>(text);
     } catch (err) {
-      console.error(`[${this.name}] generateContentIdeas fallback ke mock:`, err);
-      return this.fallback.generateContentIdeas(insights, brand, count);
+      console.error(`[${this.name}] generateContentIdeas gagal (tanpa fallback mock):`, err);
+      throw err;
     }
   }
 
@@ -192,8 +190,8 @@ Output: {"isRelevant":false,"relevanceScore":10,"sentiment":"neutral","riskScore
       );
       return this.extractJson<HookReviewResult>(text);
     } catch (err) {
-      console.error(`[${this.name}] reviewHook fallback ke mock:`, err);
-      return this.fallback.reviewHook(input, brand);
+      console.error(`[${this.name}] reviewHook gagal (tanpa fallback mock):`, err);
+      throw err;
     }
   }
 
@@ -220,8 +218,8 @@ Output: {"isRelevant":false,"relevanceScore":10,"sentiment":"neutral","riskScore
         contentBody: toArray(parsed.contentBody),
       };
     } catch (err) {
-      console.error(`[${this.name}] generateHooks fallback ke mock:`, err);
-      return this.fallback.generateHooks(input, brand);
+      console.error(`[${this.name}] generateHooks gagal (tanpa fallback mock):`, err);
+      throw err;
     }
   }
 
@@ -236,10 +234,11 @@ Output: {"isRelevant":false,"relevanceScore":10,"sentiment":"neutral","riskScore
         `${this.brandBlock(brand)}\n\nData periode lengkap (JSON): ${JSON.stringify(stats)}\n\nSampel percakapan (bukti):\n${insights.slice(0, 24).map((i) => `- [${i.sentiment}/${i.issueCategory}] ${i.content.slice(0, 160)}`).join("\n")}\n\nTulis laporan KOMPREHENSIF & DETAIL untuk manajemen. Setiap judul di baris sendiri diawali "## ". Struktur wajib:\n## Ringkasan Eksekutif\n(3-4 kalimat: kondisi brand, angka kunci, dan 1 kalimat "so what" untuk direksi)\n## Analisis Sentimen & Volume\n(komposisi sentimen dengan persentase, growth volume vs periode lalu, interpretasi per platform dari sentimentByPlatform, total engagement/views)\n## Isu Utama & Risiko Reputasi\n(isu dominan dengan angka, distribusi tingkat risiko dari riskDistribution, apakah negativeGrowth naik/turun, potensi eskalasi konkret)\n## Suara Audiens\n(interpretasi topIntents: apa yang audiens tanyakan/keluhkan/inginkan; sebut slang yang naik dari emergingSlang bila ada)\n## Lanskap Kompetitif & Media\n(competitorMentions sebagai sinyal share of voice, sebaran wilayah dari topLocations)\n## Perbandingan Periode\n(bandingkan metrik kunci vs periode sebelumnya — health, volume, negatif — apakah membaik atau memburuk)\n## Rekomendasi Tindakan\n(4-6 rekomendasi KONKRET & berprioritas, format bullet "- ", masing-masing sebutkan tindakan + alasan berbasis data + urgensi)\n\nATURAN KETAT: tulis KETUJUH judul "## " di atas SECARA LENGKAP DAN BERURUTAN, walaupun data suatu bagian terbatas (tulis 1 kalimat singkat "Data terbatas pada periode ini" bila memang minim) — DILARANG menghapus, menggabungkan, atau mengganti nama judul. Rujuk angka nyata di setiap bagian. Panjang total memadai untuk laporan manajemen (bukan ringkas).`,
         "summarizeReport"
       );
-      return out.trim() || (await this.fallback.summarizeReport(stats, insights, brand));
+      if (!out.trim()) throw new Error(`[${this.name}] summarizeReport kosong`);
+      return out.trim();
     } catch (err) {
-      console.error(`[${this.name}] summarizeReport fallback ke mock:`, err);
-      return this.fallback.summarizeReport(stats, insights, brand);
+      console.error(`[${this.name}] summarizeReport gagal (tanpa fallback mock):`, err);
+      throw err;
     }
   }
 }

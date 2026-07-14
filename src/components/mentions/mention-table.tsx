@@ -74,7 +74,7 @@ export function MentionTable({ mentions }: { mentions: MentionWithAnalysis[] }) 
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`Buka sumber asli mention dari ${m.authorName || m.sourcePlatform}`}
-                    title={m.origin === "mock" ? "URL simulasi (mock) — halaman aslinya tidak ada, akan 404" : "Buka sumber asli"}
+                    title={m.origin === "mock" ? "Tautan sumber dari data lama — halaman bisa jadi tidak tersedia" : "Buka sumber asli"}
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden="true" />

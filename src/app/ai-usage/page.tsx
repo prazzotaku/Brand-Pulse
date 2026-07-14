@@ -12,7 +12,6 @@ const PROVIDER_LABEL: Record<string, string> = {
   gemini: "Gemini",
   deepseek: "DeepSeek",
   anthropic: "Anthropic",
-  mock: "Mock (tanpa token nyata)",
 };
 
 const OPERATION_LABEL: Record<string, string> = {
@@ -25,8 +24,7 @@ const OPERATION_LABEL: Record<string, string> = {
 
 /**
  * Token Meter — memantau pemakaian token AI (Gemini/DeepSeek/Anthropic) di seluruh
- * aplikasi, plus saldo live DeepSeek. Provider mock tidak tercatat karena tidak
- * memakai token/kuota sungguhan.
+ * aplikasi, plus saldo live DeepSeek.
  */
 export default async function AiUsagePage() {
   const summary = await getAiUsageSummary();
@@ -92,7 +90,7 @@ export default async function AiUsagePage() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Saldo DeepSeek tidak tersedia atau habis. Panggilan yang menargetkan provider ini akan
-            gagal dan otomatis fallback ke hasil mock hingga saldo diisi ulang.
+            gagal hingga saldo diisi ulang.
           </p>
         </div>
       )}

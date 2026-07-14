@@ -1,8 +1,8 @@
 /**
  * Seed Brand Pulse OS — setup awal TANPA data mock:
  * brand contoh, keyword, sumber data live (API resmi + Google News RSS),
- * saved view default, dan search profile. Data mention diisi oleh refresh
- * (connector live) atau manual import — bukan data palsu.
+ * dan saved view default. Data mention diisi oleh refresh (connector live)
+ * atau manual import — bukan data palsu.
  *
  * Jalankan: npm run db:seed  (atau npm run db:reset untuk mulai bersih)
  */
@@ -22,7 +22,6 @@ async function main() {
   await prisma.contentReview.deleteMany();
   await prisma.report.deleteMany();
   await prisma.refreshJob.deleteMany();
-  await prisma.searchProfile.deleteMany();
   await prisma.source.deleteMany();
   await prisma.brandKeyword.deleteMany();
   await prisma.brand.deleteMany();
@@ -86,24 +85,6 @@ async function main() {
     await prisma.savedFilter.create({ data: { ...v, brandId: brand.id } });
   }
 
-  await prisma.searchProfile.createMany({
-    data: [
-      {
-        brandId: brand.id,
-        name: "Crisis Watch",
-        query: "Bank Jakarta",
-        booleanQuery: '("Bank Jakarta" OR "Bank DKI" OR "JakOne") AND ("error" OR "gangguan" OR "penipuan") NOT ("lowongan" OR "loker")',
-        refreshInterval: "5m",
-      },
-      {
-        brandId: brand.id,
-        name: "Campaign QRIS",
-        query: "QRIS Bank Jakarta",
-        booleanQuery: '("Bank Jakarta" OR "JakOne") AND ("QRIS" OR "cashback")',
-        refreshInterval: "30m",
-      },
-    ],
-  });
 
   console.log("Seed selesai (tanpa data mock).");
   console.log("Langkah berikutnya: ganti nama brand di Settings sesuai brand Anda,");

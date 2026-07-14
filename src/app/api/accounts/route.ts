@@ -7,7 +7,10 @@ import { getConnectors } from "@/lib/connectors/registry";
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const platform = String(body.platform ?? "").trim();
-  const handle = String(body.handle ?? "").trim();
+  // Normalisasi handle: hapus "@" di depan dan URL prefix bila user paste link
+  // profil, supaya connector (yang membentuk URL dari handle) tidak dapat "@@user".
+  const rawHandle = String(body.handle ?? "").trim();
+  const handle = rawHandle.replace(/^https?:\/\/(www\.)?[^/]+\//i, "").replace(/^@+/, "").replace(/\/+$/, "");
   if (!platform || !handle) {
     return NextResponse.json({ ok: false, error: "Butuh 'platform' dan 'handle'." }, { status: 400 });
   }

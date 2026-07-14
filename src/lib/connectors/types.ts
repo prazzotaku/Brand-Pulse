@@ -11,11 +11,13 @@ export interface FetchParams {
   cursor?: string;
 }
 
+// Scope mencerminkan mode fetch yang didukung connector live saat ini.
 export type FetchScope = "owned_account" | "public_keyword" | "public_hashtag";
 
 /**
  * Parameter terstruktur untuk setiap tugas fetch.
- * Dibangun oleh pipeline refresh dari SourceAccount / SearchProfile.
+ * Dibangun oleh pipeline refresh dari SourceAccount dan target connector
+ * non-akun seperti news/blog.
  */
 export interface FetchTarget extends FetchParams {
   /** Platform target fetch: facebook | instagram | x | threads | tiktok | ... */
@@ -23,8 +25,10 @@ export interface FetchTarget extends FetchParams {
   scope: FetchScope;
   // Opsional, untuk scope: 'owned_account'
   handle?: string;
-  // Opsional, ID dari baris SourceAccount / SearchProfile
+  // Opsional, ID dari baris SourceAccount
   targetId?: string;
+  // Opsional, untuk membedakan connector dengan platform sama (mis. news_api vs rss)
+  connectorHint?: string;
 }
 
 export interface AccountConfig {
