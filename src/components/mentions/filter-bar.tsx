@@ -28,6 +28,10 @@ export function FilterBar() {
       const v = String(value).trim();
       if (v) next.set(key, v);
     }
+    // Pertahankan pageSize saat filter berubah
+    if (params.has("pageSize")) {
+      next.set("pageSize", params.get("pageSize")!);
+    }
     router.push(`${pathname}?${next.toString()}`);
   }
 

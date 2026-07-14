@@ -18,7 +18,7 @@ export function MediaFilterBar() {
   const params = useSearchParams();
   const get = (key: string) => params.get(key) ?? "";
 
-  const KEEP = ["range", "month", "year", "gran"];
+  const KEEP = ["range", "month", "year", "gran", "pageSize"];
 
   function apply(formData: FormData) {
     const next = new URLSearchParams();

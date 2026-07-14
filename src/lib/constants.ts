@@ -94,3 +94,6 @@ export const SENTIMENT_CHART_COLORS: Record<Sentiment, string> = {
   neutral: "#64748B",
   mixed: "#7C3AED",
 };
+
+export const PAGE_SIZE_OPTIONS = [20, 50, 100];
+export const DEFAULT_PAGE_SIZE = 20;
