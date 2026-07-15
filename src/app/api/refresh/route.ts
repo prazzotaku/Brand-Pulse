@@ -90,9 +90,21 @@ function buildTargetFromAccount(acc: {
  * - X / Threads / TikTok / YouTube → pencarian publik berbasis nama akun
  * - News / Blog → query brand sekali per connector
  */
+type RefreshTargetGroup = "social" | "news" | "blog";
+
+function hasTargetGroup(groups: RefreshTargetGroup[], group: RefreshTargetGroup): boolean {
+  return groups.includes(group);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const trigger = body.trigger === "scheduled" ? "scheduled" : "manual";
+  const targetGroups = Array.isArray(body.targetGroups)
+    ? (body.targetGroups.filter((g: unknown): g is RefreshTargetGroup =>
+        g === "social" || g === "news" || g === "blog"
+      ))
+    : [];
+  const refreshAll = targetGroups.length === 0;
 
   const brand = await getActiveBrand();
   const brandCtx = toBrandContext(brand);
@@ -117,13 +129,16 @@ export async function POST(req: NextRequest) {
     const failures: string[] = [];
 
     const targets: FetchTarget[] = [];
-    for (const acc of sourceAccounts) {
-      const target = buildTargetFromAccount(acc);
-      if (!target) {
-        console.warn(`[REFRESH] Lewati akun ${acc.platform}/${acc.handle}: target tidak valid atau platform belum didukung.`);
-        continue;
+
+    if (refreshAll || hasTargetGroup(targetGroups, "social")) {
+      for (const acc of sourceAccounts) {
+        const target = buildTargetFromAccount(acc);
+        if (!target) {
+          console.warn(`[REFRESH] Lewati akun ${acc.platform}/${acc.handle}: target tidak valid atau platform belum didukung.`);
+          continue;
+        }
+        targets.push(target);
       }
-      targets.push(target);
     }
 
     const allConnectors = getConnectors();
@@ -133,6 +148,13 @@ export async function POST(req: NextRequest) {
     for (const connector of allConnectors) {
       if (!["news", "blog"].includes(connector.meta.platform)) continue;
       if (connector.meta.method === "manual_import") continue;
+
+      const isNewsTarget = connector.meta.platform === "news";
+      const isBlogTarget = connector.meta.platform === "blog";
+      const shouldInclude = refreshAll
+        || (isNewsTarget && hasTargetGroup(targetGroups, "news"))
+        || (isBlogTarget && hasTargetGroup(targetGroups, "blog"));
+      if (!shouldInclude) continue;
 
       const key = `${connector.meta.platform}:${connector.meta.method}`;
       if (addedQueryTargets.has(key)) continue;
