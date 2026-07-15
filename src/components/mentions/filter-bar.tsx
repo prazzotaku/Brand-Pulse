@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState } from "react";
 import { SlidersHorizontal, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { PLATFORMS, SENTIMENTS, ISSUE_CATEGORIES, DATE_RANGES } from "@/lib/constants";
+import { useQueryState } from "@/lib/use-query-state";
 
 /**
  * Filter engine UI — semua state filter hidup di URL (shareable & bisa
@@ -15,24 +15,28 @@ import { PLATFORMS, SENTIMENTS, ISSUE_CATEGORIES, DATE_RANGES } from "@/lib/cons
  * yang sama lalu menerjemahkannya lewat buildMentionWhere().
  */
 export function FilterBar() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+  const { get, push } = useQueryState();
   const [expanded, setExpanded] = useState(false);
 
-  const get = (key: string) => params.get(key) ?? "";
-
   function apply(formData: FormData) {
-    const next = new URLSearchParams();
+    const patch: Record<string, string> = {};
     for (const [key, value] of formData.entries()) {
       const v = String(value).trim();
-      if (v) next.set(key, v);
+      if (v) patch[key] = v;
     }
-    // Pertahankan pageSize saat filter berubah
-    if (params.has("pageSize")) {
-      next.set("pageSize", params.get("pageSize")!);
-    }
-    router.push(`${pathname}?${next.toString()}`);
+    push(patch, {
+      base: "whitelist",
+      preserveKeys: ["pageSize"],
+      resetPage: true,
+    });
+  }
+
+  function reset() {
+    push({}, {
+      base: "whitelist",
+      preserveKeys: ["pageSize"],
+      resetPage: true,
+    });
   }
 
   return (
@@ -106,8 +110,8 @@ export function FilterBar() {
             <Label htmlFor="f-mediaTier">Media tier (berita)</Label>
             <Select id="f-mediaTier" name="mediaTier" defaultValue={get("mediaTier")} className="h-9">
               <option value="">Semua tier</option>
-              <option value="tier1">Tier 1 nasional</option>
-              <option value="tier2">Tier 2 industri</option>
+              <option value="tier1">Tier 1 Nasional</option>
+              <option value="tier2">Tier 2 Industri</option>
               <option value="tier1,tier2">Tier 1 + 2</option>
               <option value="local">Media lokal</option>
               <option value="blog">Blog</option>
@@ -192,7 +196,7 @@ export function FilterBar() {
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm">Terapkan filter</Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => router.push(pathname)}>
+        <Button type="button" variant="outline" size="sm" onClick={() => push({}, { base: "whitelist", preserveKeys: ["pageSize"], resetPage: true })}>
           <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>

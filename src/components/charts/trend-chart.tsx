@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -8,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SENTIMENT_CHART_COLORS } from "@/lib/constants";
 import { GRANULARITIES } from "@/lib/period";
 import type { TrendPoint } from "@/lib/trend";
+import { useQueryState } from "@/lib/use-query-state";
 
 /**
  * Trendline sentimen dari waktu ke waktu dengan selektor granularity
@@ -23,14 +23,10 @@ export function TrendChart({
   granularity: string;
   height?: number;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+  const { push } = useQueryState();
 
   function setGran(g: string) {
-    const next = new URLSearchParams(params.toString());
-    next.set("gran", g);
-    router.push(`${pathname}?${next.toString()}`);
+    push({ gran: g }, { base: "all" });
   }
 
   const hasData = data.some((d) => d.total > 0);

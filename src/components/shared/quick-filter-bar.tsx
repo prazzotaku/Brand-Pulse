@@ -1,12 +1,12 @@
 "use client";
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { PLATFORMS, SENTIMENTS, ISSUE_CATEGORIES } from "@/lib/constants";
+import { useQueryState } from "@/lib/use-query-state";
 
 /**
  * Filter cepat generik (platform, sentiment, issue, keyword, risk) yang
@@ -14,33 +14,27 @@ import { PLATFORMS, SENTIMENTS, ISSUE_CATEGORIES } from "@/lib/constants";
  * Sociograph, dan halaman analitik lain agar semua angka filter-aware.
  */
 export function QuickFilterBar() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-
-  const get = (key: string) => params.get(key) ?? "";
+  const { get, push } = useQueryState();
 
   function apply(formData: FormData) {
-    const next = new URLSearchParams();
-    for (const k of ["range", "month", "year"]) {
-      const v = params.get(k);
-      if (v) next.set(k, v);
-    }
+    const patch: Record<string, string> = {};
     for (const [key, value] of formData.entries()) {
       const v = String(value).trim();
-      if (v) next.set(key, v);
+      if (v) patch[key] = v;
     }
-    router.push(`${pathname}?${next.toString()}`);
+    push(patch, {
+      base: "whitelist",
+      preserveKeys: ["range", "month", "year", "pageSize"],
+      resetPage: true,
+    });
   }
 
   function reset() {
-    const next = new URLSearchParams();
-    for (const k of ["range", "month", "year"]) {
-      const v = params.get(k);
-      if (v) next.set(k, v);
-    }
-    const qs = next.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    push({}, {
+      base: "whitelist",
+      preserveKeys: ["range", "month", "year", "pageSize"],
+      resetPage: true,
+    });
   }
 
   return (
