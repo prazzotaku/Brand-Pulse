@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Newspaper, AtSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 
@@ -14,12 +14,15 @@ const INTERVALS: { value: string; label: string; ms: number }[] = [
   { value: "1h", label: "Setiap 1 jam", ms: 60 * 60 * 1000 },
 ];
 
+type RefreshTargetGroup = "social" | "news" | "blog";
+
 interface RefreshDiagnostics {
   finishedAt: string;
   newMentions: number;
   updatedMentions: number;
   duplicatesSkipped: number;
   failedSources: number;
+  error?: string;
 }
 
 /**
@@ -30,19 +33,24 @@ interface RefreshDiagnostics {
 export function RefreshControl() {
   const router = useRouter();
   const [interval_, setInterval_] = useState("manual");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null); // null | "all" | "social" | "news"
   const [diag, setDiag] = useState<RefreshDiagnostics | null>(null);
   const [failed, setFailed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const runRefresh = useCallback(
-    async (trigger: "manual" | "scheduled") => {
-      setLoading(true);
+    async (trigger: "manual" | "scheduled", targetGroups: RefreshTargetGroup[] = []) => {
+      const scope = targetGroups.join(",") || "all";
+      setLoading(scope);
       try {
         const res = await fetch("/api/refresh", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ trigger, interval: trigger === "scheduled" ? interval_ : "" }),
+          body: JSON.stringify({
+            trigger,
+            interval: trigger === "scheduled" ? interval_ : "",
+            targetGroups: targetGroups.length ? targetGroups : undefined,
+          }),
         });
         const data = await res.json();
         if (res.ok) {
@@ -50,12 +58,13 @@ export function RefreshControl() {
           setFailed(false);
         } else {
           setFailed(true);
+          setDiag({ ...data, finishedAt: new Date().toISOString() });
         }
         router.refresh();
       } catch {
         setFailed(true);
       } finally {
-        setLoading(false);
+        setLoading(null);
       }
     },
     [router, interval_]
@@ -85,27 +94,30 @@ export function RefreshControl() {
   return (
     <div className="flex items-center gap-2">
       <span className="hidden text-xs text-muted-foreground lg:inline" aria-live="polite">
-        {failed && <span className="font-medium text-destructive">Refresh gagal — coba lagi.</span>}
+        {failed && <span className="font-medium text-destructive">Refresh belum berhasil. Coba lagi sebentar lagi.</span>}
         {!failed && diag && (
           <>
             Refresh {diagTime} —{" "}
             <span className="font-medium text-emerald-700">Baru: {diag.newMentions}</span>
             {" · "}Update: {diag.updatedMentions}
-            {" · "}Duplikat dilewati: {diag.duplicatesSkipped}
+            {" · "}Duplikat: {diag.duplicatesSkipped}
             {diag.failedSources > 0 && (
-              <span className="font-medium text-destructive"> · Gagal: {diag.failedSources} source</span>
+              <span className="font-medium text-destructive">
+                {" · "}Sebagian sumber belum berhasil diperbarui ({diag.failedSources})
+              </span>
             )}
           </>
         )}
       </span>
       <label htmlFor="refresh-interval" className="sr-only">
-        Interval refresh
+        Interval refresh terjadwal
       </label>
       <Select
         id="refresh-interval"
         value={interval_}
         onChange={(e) => setInterval_(e.target.value)}
         className="h-9 w-40"
+        aria-label="Interval refresh terjadwal"
       >
         {INTERVALS.map((i) => (
           <option key={i.value} value={i.value}>
@@ -113,10 +125,32 @@ export function RefreshControl() {
           </option>
         ))}
       </Select>
-      <Button size="sm" onClick={() => runRefresh("manual")} disabled={loading}>
-        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-        {loading ? "Memuat..." : "Reload now"}
+      <Button size="sm" onClick={() => runRefresh("manual", ["social", "news", "blog"])} disabled={Boolean(loading)}>
+        <RefreshCw className={`h-4 w-4 ${loading === "all" ? "animate-spin" : ""}`} aria-hidden="true" />
+        {loading === "all" ? "Memuat..." : "Reload all"}
       </Button>
+      <div className="flex items-center">
+        <Button
+          size="icon"
+          variant="outline"
+          className="h-9 w-9 rounded-r-none border-r-0"
+          onClick={() => runRefresh("manual", ["social"])}
+          disabled={Boolean(loading)}
+          aria-label="Reload Social"
+        >
+          <AtSign className={`h-4 w-4 ${loading === "social" ? "animate-spin" : ""}`} />
+        </Button>
+        <Button
+          size="icon"
+          variant="outline"
+          className="h-9 w-9 rounded-l-none"
+          onClick={() => runRefresh("manual", ["news", "blog"])}
+          disabled={Boolean(loading)}
+          aria-label="Reload News"
+        >
+          <Newspaper className={`h-4 w-4 ${loading === "news,blog" ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
     </div>
   );
 }
