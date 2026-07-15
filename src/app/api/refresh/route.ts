@@ -66,7 +66,7 @@ function buildTargetFromAccount(acc: {
       query: handle,
       handle,
       targetId: acc.id,
-      limit: 15,
+      limit: 30,
     };
   }
 
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
         platform: connector.meta.platform,
         connectorHint: connector.meta.method,
         query: brand.name,
-        limit: 20,
+        limit: 50,
       };
       targets.push(target);
     }
