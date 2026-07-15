@@ -1,10 +1,10 @@
 "use client";
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { CalendarRange } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { DATE_RANGES } from "@/lib/constants";
+import { useQueryState } from "@/lib/use-query-state";
 
 /**
  * Filter periode analisis lintas halaman — preset relatif (24 jam s.d. 1 tahun),
@@ -12,20 +12,18 @@ import { DATE_RANGES } from "@/lib/constants";
  * State disimpan di URL sehingga bisa dibagikan ke pengambil keputusan lain.
  */
 export function PeriodFilter() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
+  const { params, push } = useQueryState();
 
   const activeMonth = params.get("month") ?? "";
   const activeYear = params.get("year") ?? "";
   const activeRange = activeMonth || activeYear ? "" : (params.get("range") ?? "7d");
 
   function setPeriod(kv: Record<string, string>) {
-    const next = new URLSearchParams(params.toString());
-    ["range", "month", "year", "page"].forEach((k) => next.delete(k));
-    for (const [k, v] of Object.entries(kv)) if (v) next.set(k, v);
-    const qs = next.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
+    push(kv, {
+      base: "all",
+      clearKeys: ["range", "month", "year"],
+      resetPage: true,
+    });
   }
 
   const currentYear = new Date().getFullYear();
