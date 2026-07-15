@@ -6,7 +6,7 @@ import { PaginationControls } from "@/components/shared/pagination-controls";
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { buildMentionWhere, type MentionFilters } from "@/lib/filters";
-import { PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { PAGE_SIZE_OPTIONS, DEFAULT_PAGE_SIZE, MENTIONS_QUICK_PLATFORM_FILTERS, buildQuickPlatformHref, getQuickPlatformCurrent, getQuickPlatformClass, isQuickPlatformActive } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +36,8 @@ export default async function MentionsPage({
     prisma.savedFilter.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "asc" } }),
   ]);
 
+  const currentPlatformFilter = getQuickPlatformCurrent(new URLSearchParams(searchParams as Record<string, string>));
+
   return (
     <div className="mx-auto max-w-7xl space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -58,6 +60,19 @@ export default async function MentionsPage({
             className="rounded-full border bg-card px-3 py-1 text-xs font-medium transition-colors hover:border-primary hover:text-primary"
           >
             {v.name}
+          </Link>
+        ))}
+      </div>
+
+      {/* Quick Platform Filters */}
+      <div className="flex flex-wrap items-center gap-2" aria-label="Quick platform filters">
+        {MENTIONS_QUICK_PLATFORM_FILTERS.map((filter) => (
+          <Link
+            key={filter.value}
+            href={buildQuickPlatformHref(new URLSearchParams(searchParams as Record<string, string>), filter.value)}
+            className={getQuickPlatformClass(isQuickPlatformActive(currentPlatformFilter, filter.value))}
+          >
+            {filter.label}
           </Link>
         ))}
       </div>
