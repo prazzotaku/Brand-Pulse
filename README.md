@@ -55,7 +55,7 @@ Kontrak output analisis mengikuti PRD:
 
 Semua sumber data lewat interface `SourceConnector` (`src/lib/connectors/types.ts`). MVP memakai:
 
-- **Apify connector** untuk Facebook, Instagram, X, Threads, dan TikTok bila `APIFY_TOKEN` tersedia.
+- **Official API connectors** untuk Facebook, Instagram, X, Threads, TikTok, dan YouTube (butuh API key per platform).
 - **Official API / RSS connector** untuk YouTube, Google News, blog, dan platform resmi lain.
 - **Manual import** CSV/JSON di halaman Sources.
 

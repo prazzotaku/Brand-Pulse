@@ -45,7 +45,7 @@ model Brand {
   brandVoice       String          @default("")
   prohibitedClaims String          @default("[]") // JSON string[]
   targetAudience   String          @default("")
-  instagramHandle  String          @default("") // username atau URL profil IG, target scraping Apify
+  instagramHandle  String          @default("")
   createdAt        DateTime        @default(now())
   keywords         BrandKeyword[]
   sources          Source[]
@@ -320,28 +320,33 @@ model ContentMetric {
 }
 
 model CrawlRun {
-  id           String    @id @default(cuid())
-  brandId      String
-  brand        Brand     @relation(fields: [brandId], references: [id])
-  refreshJobId String    @default("")
-  connector    String // platform connector yang dijalankan
-  // Target spesifik crawl ini — akun owned yang di-crawl (kosong untuk
-  // connector lama yang belum pakai target eksplisit).
+  id              String         @id @default(cuid())
+  brandId         String
+  brand           Brand          @relation(fields: [brandId], references: [id])
+  refreshJobId    String
+  refreshJob      RefreshJob     @relation(fields: [refreshJobId], references: [id])
+  connector       String // platform connector yang dijalankan
+  connectorHint   String         @default("") // optional: news_api | rss | provider-specific discriminator
+  query           String         @default("")
+  handle          String         @default("")
+  limit           Int            @default(0)
   sourceAccountId String?
-  sourceAccount    SourceAccount? @relation(fields: [sourceAccountId], references: [id])
-  // Mode fetch saat crawl dijalankan: owned_account | public_keyword | public_hashtag
-  scope        String    @default("")
-  status       String    @default("running") // success | error | rate_limited | pending_auth | skipped
-  fetched      Int       @default(0)
-  inserted     Int       @default(0)
-  updated      Int       @default(0)
-  duplicates   Int       @default(0)
-  error        String    @default("")
-  startedAt    DateTime  @default(now())
-  finishedAt   DateTime?
+  sourceAccount   SourceAccount? @relation(fields: [sourceAccountId], references: [id])
+  scope           String         @default("")
+  status          String         @default("pending") // pending | running | success | error | rate_limited | pending_auth | skipped
+  fetched         Int            @default(0)
+  inserted        Int            @default(0)
+  updated         Int            @default(0)
+  duplicates      Int            @default(0)
+  error           String         @default("")
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  processedAt     DateTime? // Kapan job ini diambil dan diproses dari queue
+  createdAt       DateTime       @default(now())
 
-  @@index([brandId, startedAt])
+  @@index([brandId, createdAt])
   @@index([sourceAccountId])
+  @@index([refreshJobId, status])
 }
 
 model ConnectorCredential {
@@ -442,21 +447,22 @@ model Report {
 }
 
 model RefreshJob {
-  id            String    @id @default(cuid())
-  brandId       String
-  brand         Brand     @relation(fields: [brandId], references: [id])
-  trigger       String    @default("manual") // manual | scheduled
-  interval      String    @default("") // 5m | 30m | 1h (jika scheduled)
-  status            String    @default("queued") // queued | running | success | failed
+  id                String     @id @default(cuid())
+  brandId           String
+  brand             Brand      @relation(fields: [brandId], references: [id])
+  trigger           String     @default("manual") // manual | scheduled
+  interval          String     @default("") // 5m | 30m | 1h (jika scheduled)
+  status            String     @default("queued") // queued | running | success | failed
   startedAt         DateTime?
   finishedAt        DateTime?
-  newMentions       Int       @default(0)
-  updatedMentions   Int       @default(0) // engagement/lastSeen di-update, bukan mention baru
-  duplicatesSkipped Int       @default(0)
-  failedSources     Int       @default(0)
-  analyzedCount     Int       @default(0)
-  error             String    @default("")
-  createdAt     DateTime  @default(now())
+  newMentions       Int        @default(0)
+  updatedMentions   Int        @default(0)
+  duplicatesSkipped Int        @default(0)
+  failedSources     Int        @default(0)
+  analyzedCount     Int        @default(0)
+  error             String     @default("")
+  createdAt         DateTime   @default(now())
+  crawlRuns         CrawlRun[]
 
   @@index([brandId, createdAt])
 }

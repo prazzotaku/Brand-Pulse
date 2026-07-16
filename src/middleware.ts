@@ -5,6 +5,13 @@ import { NextRequest, NextResponse } from "next/server";
  * Struktur ini mudah diganti NextAuth pada fase berikutnya.
  */
 export function middleware(req: NextRequest) {
+  if (req.nextUrl.pathname.startsWith("/api/cron/")) {
+    const auth = req.headers.get("authorization");
+    if (process.env.CRON_SECRET && auth === `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.next();
+    }
+  }
+
   if (process.env.BASIC_AUTH_ENABLED !== "true") return NextResponse.next();
 
   const auth = req.headers.get("authorization");

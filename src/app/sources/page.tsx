@@ -12,6 +12,9 @@ export const dynamic = "force-dynamic";
 const RUN_STATUS_STYLE: Record<string, string> = {
   success: "bg-emerald-50 text-emerald-700 border-emerald-200",
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  queued: "bg-violet-50 text-violet-700 border-violet-200",
+  pending: "bg-violet-50 text-violet-700 border-violet-200",
+  running: "bg-sky-50 text-sky-700 border-sky-200",
   rate_limited: "bg-orange-50 text-orange-800 border-orange-200",
   pending_auth: "bg-amber-50 text-amber-800 border-amber-200",
   error: "bg-red-50 text-red-700 border-red-200",
@@ -21,11 +24,13 @@ const RUN_STATUS_STYLE: Record<string, string> = {
 const RUN_STATUS_LABEL: Record<string, string> = {
   success: "sukses",
   active: "aktif",
+  queued: "terantre",
+  pending: "menunggu worker",
+  running: "berjalan",
   rate_limited: "kena rate limit",
   pending_auth: "butuh API key",
   error: "error",
   skipped: "dilewati",
-  running: "berjalan",
 };
 
 export default async function SourcesPage() {
@@ -36,7 +41,7 @@ export default async function SourcesPage() {
     prisma.sourceAccount.findMany({ where: { brandId: brand.id } }),
     prisma.crawlRun.findMany({
       where: { brandId: brand.id },
-      orderBy: { startedAt: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 100,
       include: { sourceAccount: true },
     }),
