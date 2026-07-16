@@ -9,7 +9,6 @@ import {
 } from "./social-api-connectors";
 import { BlogRssConnector, ManualImportConnector, YouTubeConnector } from "./extra-connectors";
 import {
-  EnsembleFacebookConnector,
   EnsembleInstagramConnector,
   EnsembleThreadsConnector,
   EnsembleTikTokConnector,
