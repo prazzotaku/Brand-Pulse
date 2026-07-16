@@ -933,7 +933,7 @@ export async function processInlineForLocalIfNeeded(jobId: string, trigger: "man
 
 export async function createAndMaybeRunRefresh(input: { trigger: "manual" | "scheduled"; interval?: string; targetGroups?: RefreshTargetGroup[]; }) {
   const scheduled = await scheduleRefreshJobs(input);
-  const inline = await processInlineForLocalIfEnabled(scheduled.jobId, input.trigger);
+  const inline = await processRefreshInlineIfEnabled(scheduled.jobId, input.trigger);
   await reconcileRefreshJob(scheduled.jobId);
   return { scheduled, inline, job: await getRefreshJobById(scheduled.jobId) };
 }
