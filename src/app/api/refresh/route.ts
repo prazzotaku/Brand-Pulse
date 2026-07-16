@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scheduleRefreshJobs, type RefreshTargetGroup } from "@/lib/refresh-jobs";
+import {
+  scheduleRefreshJobs,
+  type RefreshTargetGroup,
+  processRefreshInlineIfEnabled,
+  reconcileRefreshJob,
+} from "@/lib/refresh-jobs";
 
-export const maxDuration = 10; // This endpoint should be very fast now.
+export const maxDuration = 55;
 
 /**
  * POST /api/refresh
  *
- * Schedules a new refresh job by creating a RefreshJob and all associated
- * CrawlRun jobs in the database with a "pending" status. This endpoint
- * no longer performs the fetching itself; it only acts as a scheduler.
- * The actual processing is handled by the cron job at /api/cron/process-queue.
+ * Default behavior:
+ * - production: schedule jobs only, cron worker will process them.
+ * - local/dev manual refresh: schedule jobs, then process queue inline
+ *   in the same request to avoid races with external cron workers and to make
+ *   localhost verification practical.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -21,19 +27,24 @@ export async function POST(req: NextRequest) {
         ))
       : [];
 
-    const result = await scheduleRefreshJobs({
+    const scheduled = await scheduleRefreshJobs({
       trigger,
       interval: trigger === "scheduled" ? body.interval ?? "" : "",
       targetGroups,
     });
 
+    const inline = await processRefreshInlineIfEnabled(scheduled.jobId, trigger);
+    await reconcileRefreshJob(scheduled.jobId);
+
     return NextResponse.json({
       ok: true,
-      jobId: result.jobId,
-      queuedRuns: result.queuedRuns,
+      jobId: scheduled.jobId,
+      queuedRuns: scheduled.queuedRuns,
+      inlineProcessed: inline?.processed ?? 0,
+      inlineResults: inline?.results ?? [],
     });
   } catch (err) {
-    console.error("[API_REFRESH] Failed to schedule refresh jobs:", err);
+    console.error("[API_REFRESH] Failed to schedule/process refresh jobs:", err);
     return NextResponse.json(
       { ok: false, error: "Failed to schedule refresh jobs.", detail: String(err) },
       { status: 500 }

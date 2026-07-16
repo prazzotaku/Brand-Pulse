@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
 import { formatDateTime } from "@/lib/utils";
 import { PLATFORM_LABELS } from "@/lib/constants";
-import { parseJsonArray } from "@/lib/types";
+import { getConnectorDirectory } from "@/lib/connectors/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +23,10 @@ const RUN_STATUS_STYLE: Record<string, string> = {
 /** Crawl Jobs — riwayat background job per connector, credential, dan rate limit. */
 export default async function CrawlJobsPage() {
   const brand = await getActiveBrand();
-  const [jobs, runs, credentials, rateLimits] = await Promise.all([
+  const connectorDirectory = getConnectorDirectory();
+  const [jobs, runs, rateLimits] = await Promise.all([
     prisma.refreshJob.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.crawlRun.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "desc" }, take: 40 }),
-    prisma.connectorCredential.findMany({ where: { brandId: brand.id }, orderBy: { platform: "asc" } }),
     prisma.rateLimitLog.findMany({ orderBy: { loggedAt: "desc" }, take: 10 }),
   ]);
 
@@ -53,16 +53,16 @@ export default async function CrawlJobsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {credentials.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
+            {connectorDirectory.map((c) => (
+              <div key={`${c.platform}-${c.label}`} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
                 <span className="font-medium">{PLATFORM_LABELS[c.platform] ?? c.platform}</span>
                 <span className="text-right">
-                  <Badge variant={c.isConfigured ? "default" : "secondary"}>
-                    {c.isConfigured ? "Terkonfigurasi" : "Butuh key"}
+                  <Badge variant={c.configured ? "default" : "secondary"}>
+                    {c.configured ? "Terkonfigurasi" : "Butuh key"}
                   </Badge>
-                  {!c.isConfigured && parseJsonArray(c.requiredKeys).length > 0 && (
+                  {!c.configured && c.requiredEnvKeys.length > 0 && (
                     <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
-                      {parseJsonArray(c.requiredKeys).join(", ")}
+                      {c.requiredEnvKeys.join(", ")}
                     </span>
                   )}
                 </span>
