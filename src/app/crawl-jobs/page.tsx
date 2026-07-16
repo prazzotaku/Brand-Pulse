@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 const RUN_STATUS_STYLE: Record<string, string> = {
   success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  queued: "bg-violet-50 text-violet-700 border-violet-200",
+  pending: "bg-violet-50 text-violet-700 border-violet-200",
   running: "bg-sky-50 text-sky-700 border-sky-200",
   error: "bg-red-50 text-red-700 border-red-200",
   rate_limited: "bg-orange-50 text-orange-800 border-orange-200",
@@ -23,7 +25,7 @@ export default async function CrawlJobsPage() {
   const brand = await getActiveBrand();
   const [jobs, runs, credentials, rateLimits] = await Promise.all([
     prisma.refreshJob.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "desc" }, take: 10 }),
-    prisma.crawlRun.findMany({ where: { brandId: brand.id }, orderBy: { startedAt: "desc" }, take: 40 }),
+    prisma.crawlRun.findMany({ where: { brandId: brand.id }, orderBy: { createdAt: "desc" }, take: 40 }),
     prisma.connectorCredential.findMany({ where: { brandId: brand.id }, orderBy: { platform: "asc" } }),
     prisma.rateLimitLog.findMany({ orderBy: { loggedAt: "desc" }, take: 10 }),
   ]);

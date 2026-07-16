@@ -9,12 +9,13 @@ import {
 } from "./social-api-connectors";
 import { BlogRssConnector, ManualImportConnector, YouTubeConnector } from "./extra-connectors";
 import {
-  ApifyFacebookConnector,
-  ApifyInstagramConnector,
-  ApifyThreadsConnector,
-  ApifyTikTokConnector,
-  ApifyXConnector,
-} from "./apify-connector";
+  EnsembleFacebookConnector,
+  EnsembleInstagramConnector,
+  EnsembleThreadsConnector,
+  EnsembleTikTokConnector,
+  EnsembleXConnector,
+  EnsembleYouTubeConnector,
+} from "./ensemble-connectors";
 import { NewsDataConnector } from "./newsdata-connector";
 
 export interface ConnectorDirectoryEntry {
@@ -43,18 +44,23 @@ export function getConnectorDirectory(): ConnectorDirectoryEntry[] {
 
 /**
  * Daftar connector "representatif" satu per platform.
- * App sekarang live-only: tidak ada mock connector lagi.
+ * EnsembleData adalah provider default untuk semua platform sosial ketika
+ * ENSEMBLEDATA_TOKEN diisi; jika tidak, fallback ke API resmi platform.
+ *
+ * PENTING: Facebook tidak didukung oleh EnsembleData berdasarkan OpenAPI spec
+ * yang ada, jadi akan selalu memakai FacebookGraphConnector (API resmi).
  */
 export function getConnectors(): SourceConnector[] {
-  const hasApify = Boolean(process.env.APIFY_TOKEN);
+  const hasEnsemble = Boolean(process.env.ENSEMBLEDATA_TOKEN);
 
   const connectors: SourceConnector[] = [
-    hasApify ? new ApifyFacebookConnector() : new FacebookGraphConnector(),
-    hasApify ? new ApifyInstagramConnector() : new InstagramGraphConnector(),
-    hasApify ? new ApifyXConnector() : new XApiConnector(),
-    hasApify ? new ApifyThreadsConnector() : new ThreadsApiConnector(),
-    hasApify ? new ApifyTikTokConnector() : new TikTokResearchConnector(),
-    new YouTubeConnector(),
+    // Facebook always uses Graph API as Ensemble does not support it.
+    new FacebookGraphConnector(),
+    hasEnsemble ? new EnsembleInstagramConnector() : new InstagramGraphConnector(),
+    hasEnsemble ? new EnsembleXConnector() : new XApiConnector(),
+    hasEnsemble ? new EnsembleThreadsConnector() : new ThreadsApiConnector(),
+    hasEnsemble ? new EnsembleTikTokConnector() : new TikTokResearchConnector(),
+    hasEnsemble ? new EnsembleYouTubeConnector() : new YouTubeConnector(),
   ];
 
   if (process.env.NEWSDATA_API_KEY) connectors.push(new NewsDataConnector());
