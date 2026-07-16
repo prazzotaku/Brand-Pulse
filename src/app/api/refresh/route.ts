@@ -3,7 +3,6 @@ import {
   scheduleRefreshJobs,
   type RefreshTargetGroup,
   processRefreshInlineIfEnabled,
-  reconcileRefreshJob,
 } from "@/lib/refresh-jobs";
 
 export const maxDuration = 55;
@@ -34,7 +33,6 @@ export async function POST(req: NextRequest) {
     });
 
     const inline = await processRefreshInlineIfEnabled(scheduled.jobId, trigger);
-    await reconcileRefreshJob(scheduled.jobId);
 
     return NextResponse.json({
       ok: true,
