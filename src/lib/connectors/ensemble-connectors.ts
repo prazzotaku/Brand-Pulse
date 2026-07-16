@@ -1,5 +1,5 @@
 import type { RawMention } from "../types";
-import { type ConnectorMeta, type FetchParams } from "./types";
+import { type ConnectorMeta, type FetchTarget } from "./types";
 import { EnvGatedConnector } from "./social-api-connectors";
 
 const BASE = "https://ensembledata.com/apis";
@@ -35,7 +35,7 @@ export class EnsembleTikTokConnector extends EnvGatedConnector {
     return Boolean(process.env.ENSEMBLEDATA_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const data = await ensembleGet(`/tt/keyword/search?name=${encodeURIComponent(params.query)}&period=180`);
     const items = ((data.data as Record<string, unknown>)?.data as Array<Record<string, unknown>>) ?? [];
     return items
@@ -109,7 +109,7 @@ export class EnsembleInstagramConnector extends EnvGatedConnector {
     return Boolean(process.env.ENSEMBLEDATA_TOKEN);
   }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     if (params.scope === "public_hashtag" || params.scope === "public_keyword") {
         const data = await ensembleGet(`/instagram/search?text=${encodeURIComponent(params.query)}`);
         const users = data?.data?.users ?? [];
@@ -240,7 +240,7 @@ export class EnsembleXConnector extends EnvGatedConnector {
   readonly meta: ConnectorMeta = { platform: "x", label: "X (EnsembleData - live)", method: "public_api", scopeNotes: "Live via Ensembledata.", requiredEnvKeys: ["ENSEMBLEDATA_TOKEN"] };
   protected isConfigured() { return Boolean(process.env.ENSEMBLEDATA_TOKEN); }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const userId = await getTwitterUserId(params.query);
     if (!userId) return [];
     const data = await ensembleGet(`/twitter/user/tweets?id=${userId}`);
@@ -282,7 +282,7 @@ export class EnsembleThreadsConnector extends EnvGatedConnector {
   readonly meta: ConnectorMeta = { platform: "threads", label: "Threads (EnsembleData - live)", method: "public_api", scopeNotes: "Live via Ensembledata.", requiredEnvKeys: ["ENSEMBLEDATA_TOKEN"] };
   protected isConfigured() { return Boolean(process.env.ENSEMBLEDATA_TOKEN); }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const data = await ensembleGet(`/threads/keyword/search?name=${encodeURIComponent(params.query)}&sorting=1`);
     const items = data?.data ?? [];
     return items.map((item: any) => this.normalizePayload(item.node)).filter(Boolean);
@@ -320,7 +320,7 @@ export class EnsembleYouTubeConnector extends EnvGatedConnector {
   readonly meta: ConnectorMeta = { platform: "youtube", label: "YouTube (EnsembleData - live)", method: "public_api", scopeNotes: "Live via Ensembledata.", requiredEnvKeys: ["ENSEMBLEDATA_TOKEN"] };
   protected isConfigured() { return Boolean(process.env.ENSEMBLEDATA_TOKEN); }
 
-  protected async fetchLive(params: FetchParams): Promise<RawMention[]> {
+  protected async fetchLive(params: FetchTarget): Promise<RawMention[]> {
     const data = await ensembleGet(`/youtube/search?keyword=${encodeURIComponent(params.query)}&depth=1&get_additional_info=true`);
     const items = data?.data?.posts ?? [];
     return items.map((item: any) => this.normalizePayload(item)).filter(Boolean);
