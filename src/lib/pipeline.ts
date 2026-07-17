@@ -253,7 +253,10 @@ export async function ingestMentions(
     result.inserted++;
 
     let analysis: AIAnalysisResult | null = null;
-    const explicitBrandHit = hasExplicitBrandMention(raw, brandCtx);
+    // Konten dari akun brand sendiri (post/komentar owned account) dianggap
+    // relevan walau tidak menyebut nama brand — komentar "keren!" di post
+    // brand jelas percakapan tentang brand.
+    const explicitBrandHit = raw.assumeRelevant === true || hasExplicitBrandMention(raw, brandCtx);
 
     if (!explicitBrandHit) {
       const competitor = findCompetitorInMention(raw, brandCtx);

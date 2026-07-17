@@ -162,6 +162,13 @@ export type MentionOrigin = "mock" | "rss" | "api" | "import";
 export interface RawMention {
   /** mock (legacy lama) | rss (feed publik nyata) | api (API resmi) | import (upload user). */
   origin?: MentionOrigin;
+  /**
+   * Lewati prefilter "harus menyebut brand secara eksplisit".
+   * Dipakai untuk konten dari akun milik brand sendiri (post + komentarnya):
+   * komentar "🔥🔥🔥" di post brand jelas relevan walau tak menyebut nama brand.
+   * AI analysis tetap berjalan normal.
+   */
+  assumeRelevant?: boolean;
   sourcePlatform: SourcePlatform;
   sourceType: SourceType;
   externalId: string;

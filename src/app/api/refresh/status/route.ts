@@ -1,27 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getActiveBrand } from "@/lib/brand";
+import { getSafeJobById, getSafeLatestJob } from "@/lib/refresh-jobs";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/refresh/status
  *
- * Returns the latest RefreshJob for the active brand. The UI polls this
- * endpoint to track the progress of an async refresh.
+ * Returns the latest RefreshJob for the active brand. Before returning, it
+ * normalizes stale jobs so the UI does not keep spinning forever on dead state.
  */
 export async function GET(req: NextRequest) {
   try {
     const brand = await getActiveBrand();
     const jobId = req.nextUrl.searchParams.get("jobId")?.trim();
     const latestJob = jobId
-      ? await prisma.refreshJob.findFirst({
-          where: { id: jobId, brandId: brand.id },
-        })
-      : await prisma.refreshJob.findFirst({
-          where: { brandId: brand.id },
-          orderBy: { createdAt: "desc" },
-        });
+      ? await getSafeJobById(brand.id, jobId)
+      : await getSafeLatestJob(brand.id);
 
     if (!latestJob) {
       return NextResponse.json({ ok: true, job: null, message: "No refresh jobs found." });

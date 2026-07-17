@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getActiveBrand, toBrandContext } from "@/lib/brand";
 import { getConnectors } from "@/lib/connectors/registry";
-import { detectNegativeSpike, ingestMentions, type IngestResult } from "@/lib/pipeline";
+import { detectNegativeSpike, ingestMentions } from "@/lib/pipeline";
 import type { FetchScope, FetchTarget, SourceConnector } from "@/lib/connectors/types";
 import type { RawMention } from "@/lib/types";
 
@@ -10,12 +10,12 @@ export type RefreshTargetGroup = "social" | "news" | "blog";
 export interface ScheduledRefreshResult {
   jobId: string;
   queuedRuns: number;
-  trigger: "manual" | "scheduled";
 }
 
 export interface ProcessCrawlRunResult {
   runId: string;
   refreshJobId: string;
+  connector: string;
   status: string;
   fetched: number;
   inserted: number;
@@ -26,75 +26,83 @@ export interface ProcessCrawlRunResult {
   error?: string;
 }
 
+export interface ProcessQueueBatchResult {
+  processed: number;
+  skipped: number;
+  totalElapsedMs: number;
+  results: Array<{ runId: string; connector: string; status: string; inserted: number; fetched: number; error?: string }>;
+}
+
+const STALE_QUEUED_MS = 3 * 60 * 1000;
+const STALE_RUNNING_MS = 10 * 60 * 1000;
+
+// Batas waktu proses batch (dalam ms) sebelum berhenti agar tidak timeout.
+const PROD_MAX_RUN_MS = 50_000;
+const PROD_TIME_BUFFER_MS = 5_000;
+// Dev inline HARUS lebih pendek dari maxDuration route API (/api/refresh)
+// agar localhost tidak timeout saat memproses banyak job.
+const DEV_MAX_RUN_MS = 45_000;
+const DEV_TIME_BUFFER_MS = 5_000;
+
+// ==================================================================
+// SECTION: Core Fetching & Target Building
+// ==================================================================
+
 export async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): Promise<RawMention[]> {
+  const isDev = process.env.NODE_ENV !== "production";
+  const maxAttempts = isDev ? 1 : 3;
   const delays = [300, 1200];
   let lastError: unknown;
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await connector.fetchMentions(params);
     } catch (err) {
       lastError = err;
       const classified = connector.handleError(err);
       if (classified.status === "pending_auth" || classified.status === "rate_limited") throw err;
-      if (attempt < delays.length) await new Promise((r) => setTimeout(r, delays[attempt]));
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
     }
   }
   throw lastError;
 }
 
-export function normalizeHandleOrUrl(input: string): string {
+function normalizeHandleOrUrl(input: string): string {
   return input.trim().replace(/^https?:\/\/(www\.)?[^/]+\//i, "").replace(/^@+/, "").replace(/\/+$/, "");
 }
 
-export function normalizePublicQuery(input: string): string {
+function normalizePublicQuery(input: string): string {
   return normalizeHandleOrUrl(input).replace(/\([^)]*\)/g, "").trim();
 }
 
-export function hasTargetGroup(groups: RefreshTargetGroup[], group: RefreshTargetGroup): boolean {
+function hasTargetGroup(groups: RefreshTargetGroup[], group: RefreshTargetGroup): boolean {
   return groups.includes(group);
 }
 
-export function scopeForPlatform(platform: string): FetchScope | null {
+function scopeForPlatform(platform: string): FetchScope | null {
   if (["facebook", "instagram"].includes(platform)) return "owned_account";
   if (["x", "threads", "tiktok", "youtube"].includes(platform)) return "public_keyword";
   return null;
 }
 
-export function buildTargetFromAccount(acc: {
-  id: string;
-  platform: string;
-  handle: string;
-  displayName: string;
-}): FetchTarget | null {
+function buildTargetFromAccount(acc: { id: string; platform: string; handle: string; displayName: string }): FetchTarget | null {
   const scope = scopeForPlatform(acc.platform);
   if (!scope) return null;
 
   if (scope === "owned_account") {
     const handle = normalizeHandleOrUrl(acc.handle);
     if (!handle) return null;
-    return {
-      scope,
-      platform: acc.platform,
-      query: handle,
-      handle,
-      targetId: acc.id,
-      limit: 30,
-    };
+    return { scope, platform: acc.platform, query: handle, handle, targetId: acc.id, limit: 30 };
   }
 
   const query = normalizePublicQuery(acc.displayName || acc.handle);
   if (!query) return null;
-  return {
-    scope,
-    platform: acc.platform,
-    query,
-    handle: normalizeHandleOrUrl(acc.handle),
-    targetId: acc.id,
-    limit: 15,
-  };
+  return { scope, platform: acc.platform, query, handle: normalizeHandleOrUrl(acc.handle), targetId: acc.id, limit: 15 };
 }
 
-export function connectorForTarget(target: FetchTarget): SourceConnector | null {
+function connectorForTarget(target: FetchTarget): SourceConnector | null {
   return (
     getConnectors().find((c) => {
       if (c.meta.platform !== target.platform) return false;
@@ -104,334 +112,273 @@ export function connectorForTarget(target: FetchTarget): SourceConnector | null 
   );
 }
 
-export async function scheduleRefreshJobs(input: {
-  trigger: "manual" | "scheduled";
-  interval?: string;
-  targetGroups?: RefreshTargetGroup[];
-}): Promise<ScheduledRefreshResult> {
-  const targetGroups = input.targetGroups ?? [];
-  const refreshAll = targetGroups.length === 0;
-
-  const brand = await getActiveBrand();
-  const existingActiveJob = await prisma.refreshJob.findFirst({
-    where: {
-      brandId: brand.id,
-      status: { in: ["queued", "running"] },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  if (existingActiveJob) {
-    return {
-      jobId: existingActiveJob.id,
-      queuedRuns: await prisma.crawlRun.count({ where: { refreshJobId: existingActiveJob.id, status: { in: ["pending", "running"] } } }),
-      trigger: input.trigger,
-    };
-  }
-
-  const sourceAccounts = await prisma.sourceAccount.findMany({ where: { brandId: brand.id, isActive: true } });
-
-  const job = await prisma.refreshJob.create({
-    data: {
-      brandId: brand.id,
-      trigger: input.trigger,
-      interval: input.trigger === "scheduled" ? input.interval ?? "" : "",
-      status: "queued",
-    },
-  });
+async function buildAllFetchTargets(brandId: string, brandName: string, targetGroups: RefreshTargetGroup[], refreshAll: boolean): Promise<FetchTarget[]> {
+  // Hanya akun MILIK BRAND ("own") yang jadi sumber mention.
+  // Akun kompetitor (accountType: "competitor") dipakai untuk penilaian
+  // kompetitor/metrik akun, bukan untuk mengisi feed mention brand —
+  // komentar di post Bank Mandiri bukan percakapan tentang Bank Jakarta.
+  const [sourceAccounts, allConnectors] = await Promise.all([
+    prisma.sourceAccount.findMany({ where: { brandId, isActive: true, accountType: "own" } }),
+    getConnectors()
+  ]);
 
   const targets: FetchTarget[] = [];
-
   if (refreshAll || hasTargetGroup(targetGroups, "social")) {
     for (const acc of sourceAccounts) {
       const target = buildTargetFromAccount(acc);
-      if (!target) {
-        console.warn(`[REFRESH] Lewati akun ${acc.platform}/${acc.handle}: target tidak valid atau platform belum didukung.`);
-        continue;
-      }
-      targets.push(target);
+      if (target) targets.push(target);
     }
   }
 
-  const allConnectors = getConnectors();
   const addedQueryTargets = new Set<string>();
-
   for (const connector of allConnectors) {
     if (!["news", "blog"].includes(connector.meta.platform)) continue;
     if (connector.meta.method === "manual_import") continue;
 
+    const status = await connector.getConnectorStatus();
+    if (status.status !== "active") continue;
+
     const isNewsTarget = connector.meta.platform === "news";
     const isBlogTarget = connector.meta.platform === "blog";
-    const shouldInclude = refreshAll
-      || (isNewsTarget && hasTargetGroup(targetGroups, "news"))
-      || (isBlogTarget && hasTargetGroup(targetGroups, "blog"));
+    const shouldInclude = refreshAll || (isNewsTarget && hasTargetGroup(targetGroups, "news")) || (isBlogTarget && hasTargetGroup(targetGroups, "blog"));
     if (!shouldInclude) continue;
 
     const key = `${connector.meta.platform}:${connector.meta.method}`;
     if (addedQueryTargets.has(key)) continue;
     addedQueryTargets.add(key);
 
-    targets.push({
-      scope: "public_keyword",
-      platform: connector.meta.platform,
-      connectorHint: connector.meta.method,
-      query: brand.name,
-      limit: 50,
-    });
+    targets.push({ scope: "public_keyword", platform: connector.meta.platform, connectorHint: connector.meta.method, query: brandName, limit: 50 });
   }
-
-  if (targets.length === 0) {
-    await prisma.refreshJob.update({
-      where: { id: job.id },
-      data: {
-        status: "success",
-        startedAt: new Date(),
-        finishedAt: new Date(),
-        error: "Tidak ada target refresh yang valid.",
-      },
-    });
-    return { jobId: job.id, queuedRuns: 0, trigger: input.trigger };
-  }
-
-  await prisma.crawlRun.createMany({
-    data: targets.map((target) => ({
-      brandId: brand.id,
-      refreshJobId: job.id,
-      connector: target.platform,
-      connectorHint: target.connectorHint ?? "",
-      query: target.query,
-      handle: target.handle ?? "",
-      limit: target.limit ?? 0,
-      sourceAccountId: target.targetId,
-      scope: target.scope,
-      status: "pending",
-    })),
-  });
-
-  return { jobId: job.id, queuedRuns: targets.length, trigger: input.trigger };
+  return targets;
 }
 
+// ==================================================================
+// SECTION: Job & Run State Management
+// ==================================================================
+
+async function expireStaleJobs(brandId: string): Promise<void> {
+  const now = new Date();
+  const queuedCutoff = new Date(Date.now() - STALE_QUEUED_MS);
+  const runningCutoff = new Date(Date.now() - STALE_RUNNING_MS);
+
+  const staleJobs = await prisma.refreshJob.findMany({
+    where: { brandId, OR: [{ status: "queued", createdAt: { lt: queuedCutoff } }, { status: "running", startedAt: { lt: runningCutoff } }] },
+    select: { id: true, status: true },
+  });
+
+  for (const job of staleJobs) {
+    await prisma.crawlRun.updateMany({
+      where: { refreshJobId: job.id, status: { in: ["pending", "running"] } },
+      data: { status: "error", finishedAt: now, error: `Expired stale ${job.status} run.` },
+    });
+    await prisma.refreshJob.update({
+      where: { id: job.id },
+      data: { status: "failed", finishedAt: now, error: `Expired stale ${job.status} job.` },
+    });
+  }
+}
+
+export async function scheduleRefreshJobs(input: {
+  trigger: "manual" | "scheduled";
+  interval?: string;
+  targetGroups?: RefreshTargetGroup[];
+}): Promise<ScheduledRefreshResult> {
+  const brand = await getActiveBrand();
+  // Di dev/inline mode, kita tidak perlu cek job aktif karena akan diproses langsung.
+  // Di prod, logic ini penting untuk mencegah duplikasi jika cron overlap.
+  if (process.env.NODE_ENV === "production") {
+    await expireStaleJobs(brand.id);
+    const existingActiveJob = await prisma.refreshJob.findFirst({
+      where: { brandId: brand.id, status: { in: ["queued", "running"] } },
+    });
+    if (existingActiveJob) {
+      return { jobId: existingActiveJob.id, queuedRuns: await prisma.crawlRun.count({ where: { refreshJobId: existingActiveJob.id, status: { in: ["pending", "running"] } } }) };
+    }
+  }
+
+  const targets = await buildAllFetchTargets(brand.id, brand.name, input.targetGroups ?? [], (input.targetGroups ?? []).length === 0);
+
+  const job = await prisma.refreshJob.create({
+    data: {
+      brandId: brand.id,
+      trigger: input.trigger,
+      interval: input.trigger === "scheduled" ? input.interval ?? "" : "",
+      status: targets.length > 0 ? "queued" : "success",
+      ...(targets.length === 0 ? { startedAt: new Date(), finishedAt: new Date(), error: "Tidak ada target refresh yang valid." } : {}),
+    },
+  });
+
+  if (targets.length > 0) {
+    await prisma.crawlRun.createMany({
+      data: targets.map((t) => ({
+        brandId: brand.id,
+        refreshJobId: job.id,
+        connector: t.platform,
+        connectorHint: t.connectorHint ?? "",
+        query: t.query,
+        handle: t.handle ?? "",
+        limit: t.limit ?? 0,
+        sourceAccountId: t.targetId,
+        scope: t.scope,
+        status: "pending",
+      })),
+    });
+  }
+  return { jobId: job.id, queuedRuns: targets.length };
+}
+
+async function finalizeRefreshJobIfDone(jobId: string): Promise<void> {
+  const openRuns = await prisma.crawlRun.count({ where: { refreshJobId: jobId, status: { in: ["pending", "running"] } } });
+  if (openRuns > 0) return;
+
+  const [job, runs] = await Promise.all([
+    prisma.refreshJob.findUnique({ where: { id: jobId } }),
+    prisma.crawlRun.findMany({ where: { refreshJobId: jobId } }),
+  ]);
+  if (!job || job.status === 'success' || job.status === 'failed') return;
+
+  const hasErrors = runs.some((r) => r.status !== 'success');
+  const errorSummary = runs.filter(r => r.error).map(r => `${r.connector}: ${r.error}`).join(' | ');
+
+  await prisma.refreshJob.update({
+    where: { id: jobId },
+    data: {
+      status: hasErrors ? "failed" : "success",
+      finishedAt: new Date(),
+      error: errorSummary,
+    },
+  });
+
+  await detectNegativeSpike(job.brandId);
+}
+
+// ==================================================================
+// SECTION: Worker & Inline Processing
+// ==================================================================
+
 export async function processNextPendingRun(): Promise<ProcessCrawlRunResult | null> {
+  const now = new Date();
+  const staleRunningCutoff = new Date(Date.now() - STALE_RUNNING_MS);
+
+  // Mark stale running jobs as error first
+  await prisma.crawlRun.updateMany({
+    where: { status: "running", startedAt: { lt: staleRunningCutoff } },
+    data: { status: "error", finishedAt: now, error: "Expired stale running crawl; aman dijalankan ulang." },
+  });
+
+  // Then fetch the next pending job
   const pendingRun = await prisma.crawlRun.findFirst({
     where: { status: "pending" },
     orderBy: { createdAt: "asc" },
   });
-
   if (!pendingRun) return null;
 
   const run = await prisma.crawlRun.update({
     where: { id: pendingRun.id },
-    data: { status: "running", startedAt: new Date(), processedAt: new Date() },
+    data: { status: "running", startedAt: now, processedAt: now },
   });
 
   const refreshJob = await prisma.refreshJob.findUnique({ where: { id: run.refreshJobId } });
-  const brand = await prisma.brand.findUnique({
-    where: { id: run.brandId },
-    include: { keywords: true },
-  });
-
-  if (!refreshJob || !brand) {
-    const error = !refreshJob ? "RefreshJob tidak ditemukan." : "Brand tidak ditemukan.";
-    await prisma.crawlRun.update({
-      where: { id: run.id },
-      data: { status: "error", finishedAt: new Date(), error },
-    });
-    return {
-      runId: run.id,
-      refreshJobId: run.refreshJobId,
-      status: "error",
-      fetched: 0,
-      inserted: 0,
-      updated: 0,
-      duplicates: 0,
-      analyzed: 0,
-      failedSourcesDelta: 1,
-      error,
-    };
-  }
-
-  if (refreshJob.status === "queued") {
+  if (refreshJob?.status === "queued") {
     await prisma.refreshJob.update({
       where: { id: refreshJob.id },
       data: { status: "running", startedAt: refreshJob.startedAt ?? new Date() },
     });
   }
 
-  const target: FetchTarget = {
-    scope: run.scope as FetchScope,
-    platform: run.connector,
-    connectorHint: run.connectorHint || undefined,
-    query: run.query,
-    handle: run.handle || undefined,
-    targetId: run.sourceAccountId ?? undefined,
-    limit: run.limit || undefined,
-  };
+  const brand = await prisma.brand.findUnique({ where: { id: run.brandId }, include: { keywords: true } });
+  const target: FetchTarget = { scope: run.scope as FetchScope, platform: run.connector, connectorHint: run.connectorHint || undefined, query: run.query, handle: run.handle || undefined, targetId: run.sourceAccountId ?? undefined, limit: run.limit || undefined };
 
-  const connector = connectorForTarget(target);
-  if (!connector) {
-    const error = `Connector tidak ditemukan untuk ${run.connector}${run.connectorHint ? `/${run.connectorHint}` : ""}.`;
-    await prisma.crawlRun.update({
-      where: { id: run.id },
-      data: { status: "error", finishedAt: new Date(), error },
-    });
-    await applyRunResultToRefreshJob(run.refreshJobId, {
-      runId: run.id,
-      refreshJobId: run.refreshJobId,
-      status: "error",
-      fetched: 0,
-      inserted: 0,
-      updated: 0,
-      duplicates: 0,
-      analyzed: 0,
-      failedSourcesDelta: 1,
-      error,
-    });
-    return {
-      runId: run.id,
-      refreshJobId: run.refreshJobId,
-      status: "error",
-      fetched: 0,
-      inserted: 0,
-      updated: 0,
-      duplicates: 0,
-      analyzed: 0,
-      failedSourcesDelta: 1,
-      error,
-    };
-  }
-
+  let result: ProcessCrawlRunResult;
   try {
-    const status = await connector.getConnectorStatus();
-    if (status.status === "pending_auth") {
-      const result: ProcessCrawlRunResult = {
-        runId: run.id,
-        refreshJobId: run.refreshJobId,
-        status: "pending_auth",
-        fetched: 0,
-        inserted: 0,
-        updated: 0,
-        duplicates: 0,
-        analyzed: 0,
-        failedSourcesDelta: 1,
-        error: status.detail ?? "",
-      };
-      await prisma.crawlRun.update({
-        where: { id: run.id },
-        data: { status: "pending_auth", finishedAt: new Date(), error: result.error ?? "" },
-      });
-      await applyRunResultToRefreshJob(run.refreshJobId, result);
-      return result;
-    }
+    if (!brand) throw new Error("Brand not found");
+    const connector = connectorForTarget(target);
+    if (!connector) throw new Error(`Connector not found for ${target.platform}`);
+
+    const connStatus = await connector.getConnectorStatus();
+    if (connStatus.status === 'pending_auth') throw new Error(connStatus.detail ?? 'Credentials required');
 
     const raws = await fetchWithRetry(connector, target);
-    const brandCtx = toBrandContext(brand);
-    const ingest = await ingestMentions(brand.id, raws, brandCtx);
+    const ingest = await ingestMentions(brand.id, raws, toBrandContext(brand));
 
-    await prisma.crawlRun.update({
-      where: { id: run.id },
-      data: {
-        status: "success",
-        finishedAt: new Date(),
-        fetched: raws.length,
-        inserted: ingest.inserted,
-        updated: ingest.updated,
-        duplicates: ingest.duplicates,
-      },
-    });
-
-    const result: ProcessCrawlRunResult = {
-      runId: run.id,
-      refreshJobId: run.refreshJobId,
-      status: "success",
-      fetched: raws.length,
-      inserted: ingest.inserted,
-      updated: ingest.updated,
-      duplicates: ingest.duplicates,
-      analyzed: ingest.analyzed,
-      failedSourcesDelta: 0,
-    };
-    await applyRunResultToRefreshJob(run.refreshJobId, result);
-    return result;
+    await prisma.crawlRun.update({ where: { id: run.id }, data: { status: "success", finishedAt: new Date(), fetched: raws.length, inserted: ingest.inserted, updated: ingest.updated, duplicates: ingest.duplicates } });
+    result = { runId: run.id, refreshJobId: run.refreshJobId, connector: run.connector, status: "success", fetched: raws.length, ...ingest, failedSourcesDelta: 0 };
   } catch (err) {
-    const classified = connector.handleError(err);
-    const errorDetail = classified.detail ?? String(err);
-    await prisma.crawlRun.update({
-      where: { id: run.id },
-      data: { status: classified.status, finishedAt: new Date(), error: errorDetail },
-    });
-    if (classified.status === "rate_limited") {
-      await prisma.rateLimitLog.create({
-        data: { platform: run.connector, note: errorDetail },
-      });
-    }
-    const result: ProcessCrawlRunResult = {
-      runId: run.id,
-      refreshJobId: run.refreshJobId,
-      status: classified.status,
-      fetched: 0,
-      inserted: 0,
-      updated: 0,
-      duplicates: 0,
-      analyzed: 0,
-      failedSourcesDelta: 1,
-      error: errorDetail,
-    };
-    await applyRunResultToRefreshJob(run.refreshJobId, result);
-    return result;
+    const errorDetail = err instanceof Error ? err.message : String(err);
+    await prisma.crawlRun.update({ where: { id: run.id }, data: { status: "error", finishedAt: new Date(), error: errorDetail } });
+    result = { runId: run.id, refreshJobId: run.refreshJobId, connector: run.connector, status: "error", fetched: 0, inserted: 0, updated: 0, duplicates: 0, analyzed: 0, failedSourcesDelta: 1, error: errorDetail };
   }
-}
 
-export async function applyRunResultToRefreshJob(refreshJobId: string, result: ProcessCrawlRunResult): Promise<void> {
   await prisma.refreshJob.update({
-    where: { id: refreshJobId },
+    where: { id: run.refreshJobId },
     data: {
       newMentions: { increment: result.inserted },
       updatedMentions: { increment: result.updated },
       duplicatesSkipped: { increment: result.duplicates },
       analyzedCount: { increment: result.analyzed },
       failedSources: { increment: result.failedSourcesDelta },
-      error: result.error ? { set: await appendRefreshJobError(refreshJobId, result.error) } : undefined,
     },
   });
-
-  await finalizeRefreshJobIfDone(refreshJobId);
+  await finalizeRefreshJobIfDone(run.refreshJobId);
+  return result;
 }
 
-async function appendRefreshJobError(refreshJobId: string, error: string): Promise<string> {
-  const job = await prisma.refreshJob.findUnique({ where: { id: refreshJobId }, select: { error: true } });
-  const current = job?.error?.trim();
-  if (!current) return error;
-  if (current.includes(error)) return current;
-  return `${current} | ${error}`;
-}
+export async function processPendingRunsBatch(isDevInline = false): Promise<ProcessQueueBatchResult> {
+  const startTime = Date.now();
+  const results: ProcessQueueBatchResult["results"] = [];
+  let processed = 0;
 
-export async function finalizeRefreshJobIfDone(refreshJobId: string): Promise<void> {
-  const [job, runs] = await Promise.all([
-    prisma.refreshJob.findUnique({ where: { id: refreshJobId } }),
-    prisma.crawlRun.findMany({ where: { refreshJobId } }),
-  ]);
-  if (!job) return;
-  if (runs.length === 0) {
-    if (job.status === "queued") {
-      await prisma.refreshJob.update({
-        where: { id: refreshJobId },
-        data: { status: "success", startedAt: job.startedAt ?? new Date(), finishedAt: new Date() },
-      });
-    }
-    return;
+  // Di mode dev inline, proses semua job tanpa time limit.
+  // Di prod, loop tetap dibatasi waktu untuk keamanan.
+  const maxRunMs = isDevInline ? Infinity : PROD_MAX_RUN_MS;
+  const timeBufferMs = isDevInline ? 0 : PROD_TIME_BUFFER_MS;
+
+  while (Date.now() - startTime < maxRunMs - timeBufferMs) {
+    const result = await processNextPendingRun();
+    if (!result) break;
+    processed++;
+    results.push({
+      runId: result.runId,
+      connector: result.connector,
+      status: result.status,
+      inserted: result.inserted,
+      fetched: result.fetched,
+      error: result.error,
+    });
+    if (result.status === "rate_limited" && !isDevInline) break;
   }
+  return { processed, skipped: 0, totalElapsedMs: Date.now() - startTime, results };
+}
 
-  const stillOpen = runs.some((r) => ["pending", "running"].includes(r.status));
-  if (stillOpen) return;
+export async function processRefreshInlineIfEnabled(jobId: string, trigger: "manual" | "scheduled"): Promise<ProcessQueueBatchResult | null> {
+  if (process.env.NODE_ENV !== "production" && trigger === "manual") {
+    const batchResult = await processPendingRunsBatch(true);
+    await finalizeRefreshJobIfDone(jobId);
+    return batchResult;
+  }
+  return null;
+}
 
-  const hasFatal = runs.some((r) => ["error", "rate_limited", "pending_auth"].includes(r.status));
-  await prisma.refreshJob.update({
-    where: { id: refreshJobId },
-    data: {
-      status: hasFatal ? "failed" : "success",
-      startedAt: job.startedAt ?? job.createdAt,
-      finishedAt: new Date(),
-    },
-  });
+// ==================================================================
+// SECTION: UI-Facing Status Helpers
+// ==================================================================
 
-  await detectNegativeSpike(job.brandId);
+export async function getSafeLatestJob(brandId: string) {
+  await expireStaleJobs(brandId);
+  const latest = await prisma.refreshJob.findFirst({ where: { brandId }, orderBy: { createdAt: "desc" } });
+  if (latest && ["queued", "running"].includes(latest.status)) {
+    await finalizeRefreshJobIfDone(latest.id);
+    return prisma.refreshJob.findUnique({ where: { id: latest.id } });
+  }
+  return latest;
+}
+
+export async function getSafeJobById(brandId: string, jobId: string) {
+  await expireStaleJobs(brandId);
+  const job = await prisma.refreshJob.findFirst({ where: { id: jobId, brandId } });
+  if (job && ["queued", "running"].includes(job.status)) {
+    await finalizeRefreshJobIfDone(job.id);
+    return prisma.refreshJob.findUnique({ where: { id: job.id } });
+  }
+  return job;
 }
