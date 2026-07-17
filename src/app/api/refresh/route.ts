@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   scheduleRefreshJobs,
+  runManualRefreshInline,
   type RefreshTargetGroup,
-  processRefreshInlineIfEnabled,
 } from "@/lib/refresh-jobs";
 
 export const maxDuration = 55;
@@ -10,11 +10,8 @@ export const maxDuration = 55;
 /**
  * POST /api/refresh
  *
- * Default behavior:
- * - production: schedule jobs only, cron worker will process them.
- * - local/dev manual refresh: schedule jobs, then process queue inline
- *   in the same request to avoid races with external cron workers and to make
- *   localhost verification practical.
+ * - production / scheduled: queue + cron
+ * - local dev / manual: direct inline processing (deterministic, no queue race)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -26,20 +23,23 @@ export async function POST(req: NextRequest) {
         ))
       : [];
 
+    if (process.env.NODE_ENV !== "production" && trigger === "manual") {
+      const inline = await runManualRefreshInline(targetGroups);
+      return NextResponse.json({ ok: true, ...inline });
+    }
+
     const scheduled = await scheduleRefreshJobs({
       trigger,
       interval: trigger === "scheduled" ? body.interval ?? "" : "",
       targetGroups,
     });
 
-    const inline = await processRefreshInlineIfEnabled(scheduled.jobId, trigger);
-
     return NextResponse.json({
       ok: true,
       jobId: scheduled.jobId,
       queuedRuns: scheduled.queuedRuns,
-      inlineProcessed: inline?.processed ?? 0,
-      inlineResults: inline?.results ?? [],
+      inlineProcessed: 0,
+      inlineResults: [],
     });
   } catch (err) {
     console.error("[API_REFRESH] Failed to schedule/process refresh jobs:", err);

@@ -156,17 +156,7 @@ export class EnsembleInstagramConnector extends EnvGatedConnector {
     for (let i = 0; i < postTargets.length; i += concurrency) {
       const batch = postTargets.slice(i, i + concurrency);
       const batchResults = await Promise.all(
-        batch.map(async ({ mediaId, url }) => {
-          try {
-            const commentsData = await ensembleGet(`/instagram/post/comments?media_id=${mediaId}&cursor=&sorting=popular`);
-            return ((commentsData?.data?.comments ?? []) as any[])
-              .map((c: any) => this.normalizeComment(c, url))
-              .filter(Boolean) as RawMention[];
-          } catch (e) {
-            console.error(`[EnsembleInstagramConnector] Gagal mengambil komentar untuk media ${mediaId}:`, e);
-            return [] as RawMention[];
-          }
-        })
+        batch.map(({ mediaId, url }) => this.fetchCommentsForMedia(mediaId, url))
       );
       for (const comments of batchResults) {
         allMentions.push(...comments);
@@ -174,6 +164,38 @@ export class EnsembleInstagramConnector extends EnvGatedConnector {
     }
 
     return allMentions;
+  }
+
+  /**
+   * Ambil komentar sebuah post via sorting=recent + pagination cursor.
+   * "popular" dibatasi ~15 komentar tanpa pagination; "recent" bisa dipaginasi
+   * lewat nextCursor sehingga bisa menarik lebih banyak komentar per post.
+   * Dibatasi maksimal beberapa halaman agar biaya API tetap terkendali.
+   */
+  private async fetchCommentsForMedia(mediaId: string, postUrl: string): Promise<RawMention[]> {
+    const MAX_PAGES = Number(process.env.ENSEMBLE_IG_COMMENT_PAGES) || 3;
+    const collected: RawMention[] = [];
+    let cursor = "";
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      try {
+        const data = await ensembleGet(
+          `/instagram/post/comments?media_id=${mediaId}&cursor=${encodeURIComponent(cursor)}&sorting=recent`
+        );
+        const comments = ((data?.data?.comments ?? []) as any[])
+          .map((c: any) => this.normalizeComment(c, postUrl))
+          .filter(Boolean) as RawMention[];
+        collected.push(...comments);
+
+        const nextCursor = data?.data?.nextCursor;
+        if (!nextCursor || comments.length === 0) break;
+        cursor = String(nextCursor);
+      } catch (e) {
+        console.error(`[EnsembleInstagramConnector] Gagal mengambil komentar (page ${page + 1}) untuk media ${mediaId}:`, e);
+        break;
+      }
+    }
+    return collected;
   }
 
   normalizeUserSearch(raw: any): RawMention | null {
