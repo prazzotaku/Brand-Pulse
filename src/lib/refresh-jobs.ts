@@ -135,8 +135,12 @@ async function buildAllFetchTargets(brandId: string, brandName: string, targetGr
     if (!["news", "blog"].includes(connector.meta.platform)) continue;
     if (connector.meta.method === "manual_import") continue;
 
-    const status = await connector.getConnectorStatus();
-    if (status.status !== "active") continue;
+    // Cek "configured" cukup dari env key — JANGAN pakai getConnectorStatus()
+    // karena untuk Google News itu melakukan network call yang bisa gagal
+    // transien dan menyebabkan connector berita di-skip diam-diam.
+    const keys = connector.meta.requiredEnvKeys ?? [];
+    const configured = keys.every((k) => Boolean(process.env[k]));
+    if (!configured) continue;
 
     const isNewsTarget = connector.meta.platform === "news";
     const isBlogTarget = connector.meta.platform === "blog";
@@ -176,6 +180,136 @@ async function expireStaleJobs(brandId: string): Promise<void> {
       data: { status: "failed", finishedAt: now, error: `Expired stale ${job.status} job.` },
     });
   }
+}
+
+export async function runManualRefreshInline(targetGroups: RefreshTargetGroup[] = []): Promise<{
+  jobId: string;
+  queuedRuns: number;
+  inlineProcessed: number;
+  inlineResults: Array<{ runId: string; connector: string; status: string; inserted: number; fetched: number; error?: string }>;
+}> {
+  const brand = await getActiveBrand();
+  const refreshAll = targetGroups.length === 0;
+  const targets = await buildAllFetchTargets(brand.id, brand.name, targetGroups, refreshAll);
+
+  const job = await prisma.refreshJob.create({
+    data: {
+      brandId: brand.id,
+      trigger: "manual",
+      interval: "",
+      status: targets.length > 0 ? "running" : "success",
+      startedAt: new Date(),
+      ...(targets.length === 0 ? { finishedAt: new Date(), error: "Tidak ada target refresh yang valid." } : {}),
+    },
+  });
+
+  if (targets.length === 0) {
+    return { jobId: job.id, queuedRuns: 0, inlineProcessed: 0, inlineResults: [] };
+  }
+
+  const brandCtx = toBrandContext(brand);
+  const results: Array<{ runId: string; connector: string; status: string; inserted: number; fetched: number; error?: string }> = [];
+  let newMentions = 0;
+  let updatedMentions = 0;
+  let duplicatesSkipped = 0;
+  let analyzedCount = 0;
+  let failedSources = 0;
+  const errors: string[] = [];
+
+  for (const target of targets) {
+    const run = await prisma.crawlRun.create({
+      data: {
+        brandId: brand.id,
+        refreshJobId: job.id,
+        connector: target.platform,
+        connectorHint: target.connectorHint ?? "",
+        query: target.query,
+        handle: target.handle ?? "",
+        limit: target.limit ?? 0,
+        sourceAccountId: target.targetId,
+        scope: target.scope,
+        status: "running",
+        startedAt: new Date(),
+        processedAt: new Date(),
+      },
+    });
+
+    const connector = connectorForTarget(target);
+    if (!connector) {
+      const error = `Connector tidak ditemukan untuk ${target.platform}`;
+      await prisma.crawlRun.update({ where: { id: run.id }, data: { status: "error", finishedAt: new Date(), error } });
+      failedSources++;
+      errors.push(`${target.platform}: ${error}`);
+      results.push({ runId: run.id, connector: target.platform, status: "error", inserted: 0, fetched: 0, error });
+      continue;
+    }
+
+    try {
+      const connStatus = await connector.getConnectorStatus();
+      if (connStatus.status === "pending_auth") {
+        const error = connStatus.detail ?? "Credentials required";
+        await prisma.crawlRun.update({ where: { id: run.id }, data: { status: "pending_auth", finishedAt: new Date(), error } });
+        failedSources++;
+        errors.push(`${target.platform}: ${error}`);
+        results.push({ runId: run.id, connector: target.platform, status: "pending_auth", inserted: 0, fetched: 0, error });
+        continue;
+      }
+
+      const raws = await fetchWithRetry(connector, target);
+      const ingest = await ingestMentions(brand.id, raws, brandCtx);
+
+      newMentions += ingest.inserted;
+      updatedMentions += ingest.updated;
+      duplicatesSkipped += ingest.duplicates;
+      analyzedCount += ingest.analyzed;
+
+      await prisma.crawlRun.update({
+        where: { id: run.id },
+        data: {
+          status: "success",
+          finishedAt: new Date(),
+          fetched: raws.length,
+          inserted: ingest.inserted,
+          updated: ingest.updated,
+          duplicates: ingest.duplicates,
+        },
+      });
+      results.push({ runId: run.id, connector: target.platform, status: "success", inserted: ingest.inserted, fetched: raws.length });
+    } catch (err) {
+      const classified = connector.handleError(err);
+      const errorDetail = classified.detail ?? String(err);
+      await prisma.crawlRun.update({ where: { id: run.id }, data: { status: classified.status, finishedAt: new Date(), error: errorDetail } });
+      if (classified.status === "rate_limited") {
+        await prisma.rateLimitLog.create({ data: { platform: target.platform, note: errorDetail } });
+      }
+      failedSources++;
+      errors.push(`${target.platform}: ${errorDetail}`);
+      results.push({ runId: run.id, connector: target.platform, status: classified.status, inserted: 0, fetched: 0, error: errorDetail });
+    }
+  }
+
+  await prisma.refreshJob.update({
+    where: { id: job.id },
+    data: {
+      status: failedSources > 0 ? "failed" : "success",
+      finishedAt: new Date(),
+      newMentions,
+      updatedMentions,
+      duplicatesSkipped,
+      failedSources,
+      analyzedCount,
+      error: errors.join(" | "),
+    },
+  });
+
+  await detectNegativeSpike(brand.id);
+
+  return {
+    jobId: job.id,
+    queuedRuns: targets.length,
+    inlineProcessed: results.length,
+    inlineResults: results,
+  };
 }
 
 export async function scheduleRefreshJobs(input: {
