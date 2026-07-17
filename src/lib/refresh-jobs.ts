@@ -39,24 +39,31 @@ const STALE_RUNNING_MS = 10 * 60 * 1000;
 // Batas waktu proses batch (dalam ms) sebelum berhenti agar tidak timeout.
 const PROD_MAX_RUN_MS = 50_000;
 const PROD_TIME_BUFFER_MS = 5_000;
-const DEV_MAX_RUN_MS = 120_000;
-const DEV_TIME_BUFFER_MS = 10_000;
+// Dev inline HARUS lebih pendek dari maxDuration route API (/api/refresh)
+// agar localhost tidak timeout saat memproses banyak job.
+const DEV_MAX_RUN_MS = 45_000;
+const DEV_TIME_BUFFER_MS = 5_000;
 
 // ==================================================================
 // SECTION: Core Fetching & Target Building
 // ==================================================================
 
 export async function fetchWithRetry(connector: SourceConnector, params: FetchTarget): Promise<RawMention[]> {
+  const isDev = process.env.NODE_ENV !== "production";
+  const maxAttempts = isDev ? 1 : 3;
   const delays = [300, 1200];
   let lastError: unknown;
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await connector.fetchMentions(params);
     } catch (err) {
       lastError = err;
       const classified = connector.handleError(err);
       if (classified.status === "pending_auth" || classified.status === "rate_limited") throw err;
-      if (attempt < delays.length) await new Promise((r) => setTimeout(r, delays[attempt]));
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
     }
   }
   throw lastError;
@@ -106,8 +113,12 @@ function connectorForTarget(target: FetchTarget): SourceConnector | null {
 }
 
 async function buildAllFetchTargets(brandId: string, brandName: string, targetGroups: RefreshTargetGroup[], refreshAll: boolean): Promise<FetchTarget[]> {
+  // Hanya akun MILIK BRAND ("own") yang jadi sumber mention.
+  // Akun kompetitor (accountType: "competitor") dipakai untuk penilaian
+  // kompetitor/metrik akun, bukan untuk mengisi feed mention brand —
+  // komentar di post Bank Mandiri bukan percakapan tentang Bank Jakarta.
   const [sourceAccounts, allConnectors] = await Promise.all([
-    prisma.sourceAccount.findMany({ where: { brandId, isActive: true } }),
+    prisma.sourceAccount.findMany({ where: { brandId, isActive: true, accountType: "own" } }),
     getConnectors()
   ]);
 
@@ -173,13 +184,16 @@ export async function scheduleRefreshJobs(input: {
   targetGroups?: RefreshTargetGroup[];
 }): Promise<ScheduledRefreshResult> {
   const brand = await getActiveBrand();
-  await expireStaleJobs(brand.id);
-
-  const existingActiveJob = await prisma.refreshJob.findFirst({
-    where: { brandId: brand.id, status: { in: ["queued", "running"] } },
-  });
-  if (existingActiveJob) {
-    return { jobId: existingActiveJob.id, queuedRuns: await prisma.crawlRun.count({ where: { refreshJobId: existingActiveJob.id, status: { in: ["pending", "running"] } } }) };
+  // Di dev/inline mode, kita tidak perlu cek job aktif karena akan diproses langsung.
+  // Di prod, logic ini penting untuk mencegah duplikasi jika cron overlap.
+  if (process.env.NODE_ENV === "production") {
+    await expireStaleJobs(brand.id);
+    const existingActiveJob = await prisma.refreshJob.findFirst({
+      where: { brandId: brand.id, status: { in: ["queued", "running"] } },
+    });
+    if (existingActiveJob) {
+      return { jobId: existingActiveJob.id, queuedRuns: await prisma.crawlRun.count({ where: { refreshJobId: existingActiveJob.id, status: { in: ["pending", "running"] } } }) };
+    }
   }
 
   const targets = await buildAllFetchTargets(brand.id, brand.name, input.targetGroups ?? [], (input.targetGroups ?? []).length === 0);
@@ -243,6 +257,16 @@ async function finalizeRefreshJobIfDone(jobId: string): Promise<void> {
 // ==================================================================
 
 export async function processNextPendingRun(): Promise<ProcessCrawlRunResult | null> {
+  const now = new Date();
+  const staleRunningCutoff = new Date(Date.now() - STALE_RUNNING_MS);
+
+  // Mark stale running jobs as error first
+  await prisma.crawlRun.updateMany({
+    where: { status: "running", startedAt: { lt: staleRunningCutoff } },
+    data: { status: "error", finishedAt: now, error: "Expired stale running crawl; aman dijalankan ulang." },
+  });
+
+  // Then fetch the next pending job
   const pendingRun = await prisma.crawlRun.findFirst({
     where: { status: "pending" },
     orderBy: { createdAt: "asc" },
@@ -251,7 +275,7 @@ export async function processNextPendingRun(): Promise<ProcessCrawlRunResult | n
 
   const run = await prisma.crawlRun.update({
     where: { id: pendingRun.id },
-    data: { status: "running", startedAt: new Date(), processedAt: new Date() },
+    data: { status: "running", startedAt: now, processedAt: now },
   });
 
   const refreshJob = await prisma.refreshJob.findUnique({ where: { id: run.refreshJobId } });
@@ -300,23 +324,30 @@ export async function processNextPendingRun(): Promise<ProcessCrawlRunResult | n
 }
 
 export async function processPendingRunsBatch(isDevInline = false): Promise<ProcessQueueBatchResult> {
-  const maxRunMs = isDevInline ? DEV_MAX_RUN_MS : PROD_MAX_RUN_MS;
-  const timeBufferMs = isDevInline ? DEV_TIME_BUFFER_MS : PROD_TIME_BUFFER_MS;
   const startTime = Date.now();
   const results: ProcessQueueBatchResult["results"] = [];
-  let processed = 0, skipped = 0;
+  let processed = 0;
+
+  // Di mode dev inline, proses semua job tanpa time limit.
+  // Di prod, loop tetap dibatasi waktu untuk keamanan.
+  const maxRunMs = isDevInline ? Infinity : PROD_MAX_RUN_MS;
+  const timeBufferMs = isDevInline ? 0 : PROD_TIME_BUFFER_MS;
 
   while (Date.now() - startTime < maxRunMs - timeBufferMs) {
     const result = await processNextPendingRun();
     if (!result) break;
     processed++;
-    results.push({ runId: result.runId, connector: result.connector, status: result.status, inserted: result.inserted, fetched: result.fetched, error: result.error });
-    if (result.status === "rate_limited" && !isDevInline) {
-      skipped++;
-      break;
-    }
+    results.push({
+      runId: result.runId,
+      connector: result.connector,
+      status: result.status,
+      inserted: result.inserted,
+      fetched: result.fetched,
+      error: result.error,
+    });
+    if (result.status === "rate_limited" && !isDevInline) break;
   }
-  return { processed, skipped, totalElapsedMs: Date.now() - startTime, results };
+  return { processed, skipped: 0, totalElapsedMs: Date.now() - startTime, results };
 }
 
 export async function processRefreshInlineIfEnabled(jobId: string, trigger: "manual" | "scheduled"): Promise<ProcessQueueBatchResult | null> {
